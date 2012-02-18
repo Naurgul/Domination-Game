@@ -5,8 +5,9 @@ This is the game engine module that can simulate games, without rendering them.
 Refer to the readme for usage instructions.
 
 """
-
-__version__ = '1.2.0'
+__author__ = "Thomas van den Berg and Tim Doolan"
+MAJOR,MINOR,PATCH = 1,2,5
+__version__ = '%d.%d.%d'%(MAJOR,MINOR,PATCH)
 
 ### IMPORTS ###
 # Python
@@ -23,9 +24,8 @@ import traceback
 import bisect
 import hashlib
 import logging
-import cPickle as pickle
-
 from pprint import pprint
+import cPickle as pickle
 
 # Local
 from utilities import *
@@ -43,6 +43,8 @@ cos  = math.cos
 rand = random.random
 
 ### CONSTANTS###
+RANDOMSEED = 1597671198
+
 TEAM_RED     = 0
 TEAM_BLUE    = 1
 TEAM_NEUTRAL = 2
@@ -211,8 +213,6 @@ class Game(object):
         self.replay = replay #: The replay object, can be accessed after game has run
         self.stats = None #: Instance of :class:`~core.GameStats`.
         
-        self.old_stdout = sys.stdout
-        sys.stdout = self.log
         self.step_callback = step_callback
         if self.record and self.replay is not None:
             raise Exception("Cannot record and play replay at the same time.")
@@ -230,9 +230,9 @@ class Game(object):
                 self.settings.tilesize = self.field.tilesize
         # Load up a replay
         else:
-            print '[Game]: Playing replay.'
+            print 'Playing replay.'
             if replay.version != __version__:
-                raise Exception("Replay is for older game version.")
+                print >> sys.stderr, ("WARNING: Replay is for version %s, you have %s."%(replay.version, __version__))
             self.settings = replay.settings
             self.field = replay.field
             self.red_name = replay.red_name
@@ -265,6 +265,11 @@ class Game(object):
     def _setup(self):
         """ Sets up the game.
         """
+        # Redirect STDOUT
+        self.old_stdout = sys.stdout
+        sys.stdout = self.log
+        # Print version
+        print "Domination Game Ver. %s"%__version__
         # Read agent brains (from string or file)
         g = AGENT_GLOBALS.copy()
         if not self.replay:
@@ -291,12 +296,10 @@ class Game(object):
                 self.blue_name = "error"
             
         self.random = random.Random()
+        self.random.seed(RANDOMSEED)
         # Initialize new replay
         if self.record:
             self.replay = ReplayData(self)
-            self.replay.randomstate = self.random.getstate()
-        elif self.replay:
-            self.random.setstate(self.replay.randomstate)
         # Load field objects
         allobjects = self.field.get_objects()
         cps = [o for o in allobjects if isinstance(o, ControlPoint)]
@@ -328,7 +331,7 @@ class Game(object):
             self._add_object(o)
         self.controlpoints = cps
         # Initialize tanks
-        print "Loading agents."
+        print "Initializing agents."
         if self.record or self.replay is None:
             # Initialize new tanks with brains
             try:
@@ -1032,17 +1035,17 @@ class Field(object):
     @property
     def mesh(self):
         if not self._unpacked: self.unpack()
-        return self._unpacked['mesh']
+        return copy.deepcopy(self._unpacked['mesh'])
     
     @property
     def wallgrid(self):
         if not self._unpacked: self.unpack()
-        return self._unpacked['grid']
+        return copy.deepcopy(self._unpacked['grid'])
     
     @property
     def wallrects(self):
         if not self._unpacked: self.unpack()
-        return self._unpacked['wallrects']
+        return copy.deepcopy(self._unpacked['wallrects'])
     
     def get_objects(self):
         """ Creates the gameobjects and returns them """
@@ -1052,11 +1055,30 @@ class Field(object):
         
 class FieldGenerator(object):
     """ Generates field objects from random distribution """
-    
-    def __init__(self, width=41, height=26, tilesize=16, mirror=True,
+
+    def __init__(self, width=41, height=24, tilesize=16, mirror=True,
                        num_red=6, num_blue=6, num_points=3, num_ammo=6, num_crumbsource=0,
-                       wall_fill=0.4, wall_len=(4,4), wall_width=4, 
-                       wall_orientation=0.5, wall_gridsize=4):
+                       wall_fill=0.4, wall_len=(3,7), wall_width=4, 
+                       wall_orientation=0.5, wall_gridsize=6):
+        """ Create a FieldGenerator object with certain parameters for a random
+            distribution of fields.
+            
+            :param width:            The width of the field in tiles
+            :param height:           The height of the field in tiles
+            :param tilesize:         The size of each tile (don't change from 16)
+            :param mirror:           Make a symmetrical map
+            :param num_blue:         The number of blue spawns
+            :param num_red:          The number of red spawns
+            :param num_points:       The number of controlpoints
+            :param num_ammo:         The number of ammo locations on the map
+            :param num_crumbsource:  The number of crumb fountains
+            :param wall_fill:        What portion of the map is occupied by walls
+            :param wall_len:         A range for the length of wall sections (min, max)
+            :param wall_width:       The width of each wall section
+            :param wall_orientation: The probability that each wall will be placed horizontally
+                                     i.e. that the walls length will be along a horizontal axis
+            :param wall_gridsize:    Place walls only at every n-th tile with their top-left 
+        """
         self.width            = width
         self.height           = height
         self.tilesize         = tilesize
@@ -1077,14 +1099,14 @@ class FieldGenerator(object):
         """ Generates a new field using the parameters for random 
             distribution set in the constructor. 
             
-            :returns: A :class:`~core.Field` instance.
+            :returns: A :class:`~domination.core.Field` instance.
         """
         # Create a new field
         field = Field(width=self.width, height=self.height, tilesize=self.tilesize)
 
         ## IMPORTANT OBJECTS
         # Add controlpoints
-        field.scatter(Field.CONTROL, self.num_points, pad = 3, mirror=self.mirror)        
+        field.scatter(Field.CONTROL, self.num_points, pad = 4, mirror=self.mirror)        
         # Add sources of crumbs
         field.scatter(Field.SOURCE, self.num_crumbsource, pad = 2, mirror=self.mirror)
         # Spawn regions
@@ -1134,11 +1156,10 @@ class FieldGenerator(object):
             pts = new.find('W_.', bounds=(x, y, x + sec_width, y + sec_height))
             if len(pts) == sec_width*sec_height:
                 new.set(pts, Field.WALL, self.mirror)
-                new.fill_unreachable()
-                # Validate
                 if new.valid():
                     field = new
-                    continue
+                    new.fill_unreachable()
+                    continue                
             attempts -= 1
         
         # Clear walls under controlpoints
@@ -1566,6 +1587,7 @@ class Observation(object):
         
 
 class ReplayData(object):
+    """ Contains the replaydata for a game. """
     def __init__(self, game):
         self.settings = game.settings
         self.version = __version__

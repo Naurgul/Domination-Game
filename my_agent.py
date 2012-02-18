@@ -58,7 +58,7 @@ class Agent(object):
                 self.goal = closest_ammo[0:2]
             else:
                 closest_node = reduce(self.min_dist, self.__class__.UNVISITED)
-                self.self.__class__.scout_goal = closest_node
+                #self.self.__class__.scout_goal = closest_node
                 self.goal = closest_node
         else:
             #closest_cp = reduce(self.min_dist, obs.cps)
