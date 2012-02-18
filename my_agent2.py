@@ -9,7 +9,10 @@ class Agent(object):
     CPS_LOC = []
     
     def compare_ammo_dist(self, ammo_loc):
-        return (point_dist(self.__class__.SPAWN_LOC, ammo_loc[0:2]) / ammo_loc[2] )
+        return (point_dist(self.observation.loc, ammo_loc[0:2]) / ammo_loc[2] )
+    
+    def compare_spawn_dist(self, cp_loc):
+        return (point_dist(self.__class__.SPAWN_LOC, cp_loc[0:2]))
     
     def min_dist(self, loc1, loc2):
         if point_dist(self.observation.loc, loc1[0:2]) < point_dist(self.observation.loc, loc2[0:2]):
@@ -49,7 +52,8 @@ class Agent(object):
         if self.__class__.SPAWN_LOC is None:
             self.__class__.SPAWN_LOC = obs.loc
             self.__class__.CPS_LOC = obs.cps[:]
-            self.__class__.CPS_LOC.sort(key = self.compare_dist)
+            self.__class__.CPS_LOC.sort(key = self.compare_spawn_dist)
+            print self.__class__.CPS_LOC
             
         
         # find ammopacks within visual range
@@ -72,7 +76,7 @@ class Agent(object):
             
             
         
-            
+        # decide behaviour based on role    
         if self.__class__.SCOUT == self.id:
             self.scoutBehaviour(ammopacks)
         else:            
@@ -156,7 +160,7 @@ class Agent(object):
             #print "AMMOPACKS_X: ", pack
             if pack[0:2] not in self.__class__.AMMOPACKS_LOC:
                 self.__class__.AMMOPACKS_LOC.append((pack[0], pack[1], 20))
-                self.__class__.AMMOPACKS_LOC.append((656 - pack[0], pack[1], 20))
+                self.__class__.AMMOPACKS_LOC.append((656 - pack[0], pack[1], 20)) # 656 is the width of the screen in pixels
                 #print "AMMOPACKS_LOC: ", self.__class__.AMMOPACKS_LOC
                 
         #print "MY LOCATION: ", obs.loc
@@ -179,9 +183,9 @@ class Agent(object):
             
     def printInfo(self, obs):
         if obs.selected:
-            print "SCOUT id: ", self.__class__.SCOUT
-            print "SELF ID: ", self.id
-            print "CONTROL: ", obs.cps 
+            print "Scouting: {0}".format(self.__class__.SCOUT == self.id) 
+            print "Goal: {0}".format(self.goal)
+
     
     def debug(self, surface):
         """ Allows the agents to draw on the game UI,
