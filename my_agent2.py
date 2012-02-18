@@ -5,12 +5,9 @@ class Agent(object):
     UNVISITED = None
     
     SPAWN_LOC = None
-    AMMOPACKS_LOC = []
+    AMMOPACKS_LOC = {}
     CPS_LOC = []
-    
-    def compare_ammo_dist(self, ammo_loc):
-        return (point_dist(self.observation.loc, ammo_loc[0:2]) / ammo_loc[2] )
-    
+        
     def compare_spawn_dist(self, cp_loc):
         return (point_dist(self.__class__.SPAWN_LOC, cp_loc[0:2]))
     
@@ -19,6 +16,17 @@ class Agent(object):
             return loc1[0:2]
         else:
             return loc2[0:2]
+        
+    def min_ammo_dist(self, ammo_loc1, ammo_loc2):
+        WEIGHT = 750
+        d1 = (point_dist(self.observation.loc, ammo_loc1) + WEIGHT / self.__class__.AMMOPACKS_LOC[ammo_loc1] )
+        d2 = (point_dist(self.observation.loc, ammo_loc2) + WEIGHT / self.__class__.AMMOPACKS_LOC[ammo_loc2] )
+        if (d1 < d2):
+            #print "{0}<{1}".format(d1, d2)
+            return ammo_loc1
+        else:
+            #print "{0}<{1}".format(d2, d1)
+            return ammo_loc2
     
     def __init__(self, id, team, settings = None, field_rects = None, field_grid = None, nav_mesh = None):
         self.id = id
@@ -46,6 +54,7 @@ class Agent(object):
         
         # TODO: create a static variable to remember where the ammopacks are located on the map        
         # TODO: fill in roles for dead tanks
+        # TODO: replace all distances with path lengths (or do ray traces at least)
         
         #save spawn area
         #this code only runs once, in the beginning of each match!
@@ -72,9 +81,7 @@ class Agent(object):
                 self.__class__.UNVISITED.remove(x)
         
         # decide who is scouting 
-        self.whoIsScout(obs)                       
-            
-            
+        self.whoIsScout(obs)   
         
         # decide behaviour based on role    
         if self.__class__.SCOUT == self.id:
@@ -116,29 +123,38 @@ class Agent(object):
             speed = 0
         
         #print extra information when selected
-        self.printInfo(obs)
+        self.printInfo(obs, ammopacks)
         
         return (turn, speed, shoot)
     
     def updateAmmopacks(self, obs, ammopacks):
-        #for ammopacks that should be visible:
+        
+        # if I see an ammopack for the first time
+        # add both that one and its symmetric to the list of ammopack locations
+        for pack in ammopacks:
+            #print "AMMOPACKS_X: ", pack        
+            self.__class__.AMMOPACKS_LOC[(pack[0], pack[1])] = 20
+            self.__class__.AMMOPACKS_LOC[(656 - pack[0], pack[1])] = 20 # 656 is the width of the screen in pixels
+            #print "AMMOPACKS_LOC: {0}".format(self.__class__.AMMOPACKS_LOC)
+        
+        # for ammopacks that should be visible:
         #   t=20 if I see them
         #   t=0 if I don't see them
-        #for ammopacks outside my range:
+        # for ammopacks outside my range:
         #   increment t by 1
         
         for pack_loc in self.__class__.AMMOPACKS_LOC:
-            if point_dist(pack_loc[0:2], obs.loc) < 100:
+            if point_dist(pack_loc, obs.loc) < 100 :
                 found = False
                 for pack in ammopacks:
-                    if pack[0:2] == pack_loc[0:2]:
+                    if pack[0:2] == pack_loc:
                         found = True
                 if found:
-                    pack_loc = (pack_loc[0], pack_loc[1], 20)
+                    self.__class__.AMMOPACKS_LOC[pack_loc] = 20
                 else:
-                    pack_loc = (pack_loc[0], pack_loc[1], 0)
+                    self.__class__.AMMOPACKS_LOC[pack_loc] = 1
             else:
-                pack_loc = (pack_loc[0], pack_loc[1], min(20, pack_loc[2] + 1))
+                self.__class__.AMMOPACKS_LOC[pack_loc] = min( 20, self.__class__.AMMOPACKS_LOC[pack_loc] + 1 )
                 
     def whoIsScout(self, obs):
         # if no one is scouting and I don't have ammo
@@ -154,14 +170,6 @@ class Agent(object):
         
     
     def scoutBehaviour(self, ammopacks):  
-        # if I see an ammopack for the first time
-        # add both that one and its symmetric to the list of ammopack locations
-        for pack in ammopacks:
-            #print "AMMOPACKS_X: ", pack
-            if pack[0:2] not in self.__class__.AMMOPACKS_LOC:
-                self.__class__.AMMOPACKS_LOC.append((pack[0], pack[1], 20))
-                self.__class__.AMMOPACKS_LOC.append((656 - pack[0], pack[1], 20)) # 656 is the width of the screen in pixels
-                #print "AMMOPACKS_LOC: ", self.__class__.AMMOPACKS_LOC
                 
         #print "MY LOCATION: ", obs.loc
         
@@ -174,17 +182,21 @@ class Agent(object):
             self.goal = closest_ammo[0:2]
         # else, check my list of ammopack locations and go towards the closest one
         elif len(self.__class__.AMMOPACKS_LOC) > 0:
-            closest_ammo = reduce(self.min_dist, self.__class__.AMMOPACKS_LOC)
+            closest_ammo = reduce(self.min_ammo_dist, self.__class__.AMMOPACKS_LOC)
+            #print "{0}\t{1}".format(closest_ammo, self.__class__.AMMOPACKS_LOC)
             self.goal = closest_ammo
         # if that fails, start exploring unvisited nodes
         else:
             closest_node = reduce(self.min_dist, self.__class__.UNVISITED)
             self.goal = closest_node       
             
-    def printInfo(self, obs):
+    def printInfo(self, obs, ammopacks):
         if obs.selected:
-            print "Scouting: {0}".format(self.__class__.SCOUT == self.id) 
-            print "Goal: {0}".format(self.goal)
+            #print "Scouting: {0}".format(self.__class__.SCOUT == self.id) 
+            #print "Goal: {0}".format(self.goal)
+            #print "Visible ammo: {0}".format(ammopacks)
+            #print "Ammo locations: {0}".format(self.__class__.AMMOPACKS_LOC)
+            print "Ammo locations number: {0}".format(len(self.__class__.AMMOPACKS_LOC))
 
     
     def debug(self, surface):
