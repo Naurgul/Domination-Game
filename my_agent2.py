@@ -109,6 +109,8 @@ class Agent(object):
             shoot = True
 
         # use the mesh to find a path to my goal    
+        if self.goal is None:
+            print "no goal?"
         path = find_path(obs.loc, self.goal, self.mesh, self.grid, self.settings.tilesize)
         # use the path to decide the low level actions I need to take right now
         if path:
@@ -180,15 +182,20 @@ class Agent(object):
             closest_ammo = reduce(self.min_dist, ammopacks)
             #print "CLOSEST AMMO: ", closest_ammo
             self.goal = closest_ammo[0:2]
-        # else, check my list of ammopack locations and go towards the closest one
+            print "Ammopack right ahead!"
+        # else, check my list of ammopack locations and go towards the best one
         elif len(self.__class__.AMMOPACKS_LOC) > 0:
-            closest_ammo = reduce(self.min_ammo_dist, self.__class__.AMMOPACKS_LOC)
+            best_ammo_loc = reduce(self.min_ammo_dist, self.__class__.AMMOPACKS_LOC)
             #print "{0}\t{1}".format(closest_ammo, self.__class__.AMMOPACKS_LOC)
-            self.goal = closest_ammo
-        # if that fails, start exploring unvisited nodes
-        else:
-            closest_node = reduce(self.min_dist, self.__class__.UNVISITED)
-            self.goal = closest_node       
+            # go there if you think you have a good chance of finding ammo there
+            if self.__class__.AMMOPACKS_LOC[best_ammo_loc] > 10:
+                self.goal = best_ammo_loc
+                print "There was an ammopack around here somewhere..."
+            else:
+                # if not, start exploring unvisited nodes    
+                closest_node = reduce(self.min_dist, self.__class__.UNVISITED)
+                self.goal = closest_node       
+                print "Let's go exploring!"
             
     def printInfo(self, obs, ammopacks):
         if obs.selected:
