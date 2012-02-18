@@ -62,8 +62,7 @@ class Agent(object):
             self.__class__.SPAWN_LOC = obs.loc
             self.__class__.CPS_LOC = obs.cps[:]
             self.__class__.CPS_LOC.sort(key = self.compare_spawn_dist)
-            print self.__class__.CPS_LOC
-            
+            print "CPS_LOC: ", self.__class__.CPS_LOC
         
         # find ammopacks within visual range
         ammopacks = filter(lambda x: x[2] == "Ammo", obs.objects)
@@ -92,10 +91,7 @@ class Agent(object):
             # if I have no goal, then I start moving towards 
             # the CP closest to our spawn area that we don't own
             # TODO: take into account the number of enemies near the CP?
-            if self.goal is None:
-                not_poss_cps = filter(lambda x: x[2] != self.team, self.__class__.CPS_LOC)
-                not_poss_len = len(not_poss_cps)                
-                self.goal = not_poss_cps[0][0:2]
+            self.nonScoutBehaviour()
         
                 
         # if I see an enemy within range and I have ammo and there's no teammate between us,
@@ -164,12 +160,20 @@ class Agent(object):
         if self.__class__.SCOUT == None and obs.ammo == 0:
             self.__class__.SCOUT = self.id     
             
-        # If I am the scout and just foudn some ammo
+        # If I am the scout and just found some ammo
         # then I stop being the scout
         if self.__class__.SCOUT == self.id and obs.ammo > 0:
             self.__class__.SCOUT = None
             self.goal = None       
         
+    def nonScoutBehaviour(self):
+        if self.goal is None:
+            not_poss_cps = filter(lambda x: x[2] != self.team, self.observation.cps)
+            
+            if len(not_poss_cps) > 0:
+                closest_cp = reduce(self.min_dist, not_poss_cps)
+                print "Closest control point: ", closest_cp
+                self.goal = closest_cp[0:2]
     
     def scoutBehaviour(self, ammopacks):  
                 
