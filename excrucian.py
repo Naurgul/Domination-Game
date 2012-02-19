@@ -1,32 +1,16 @@
 class Agent(object):
     
-    NAME = "Warmain (Orderik)"
-    SCOUT = None
+    NAME = "warmain"
+    SCOUTS = []
     UNVISITED = None
     
     SPAWN_LOC = None
     AMMOPACKS_LOC = {}
     #CPS_LOC = []
-        
-    def compare_spawn_dist(self, cp_loc):
-        return (point_dist(self.__class__.SPAWN_LOC, cp_loc[0:2]))
     
-    def min_dist(self, loc1, loc2):
-        if point_dist(self.observation.loc, loc1[0:2]) < point_dist(self.observation.loc, loc2[0:2]):
-            return loc1[0:2]
-        else:
-            return loc2[0:2]
+    # TODO: Remove magic numbers 
         
-    def min_ammo_dist(self, ammo_loc1, ammo_loc2):
-        WEIGHT = 750
-        d1 = (point_dist(self.observation.loc, ammo_loc1) + WEIGHT / self.__class__.AMMOPACKS_LOC[ammo_loc1] )
-        d2 = (point_dist(self.observation.loc, ammo_loc2) + WEIGHT / self.__class__.AMMOPACKS_LOC[ammo_loc2] )
-        if (d1 < d2):
-            #print "{0}<{1}".format(d1, d2)
-            return ammo_loc1
-        else:
-            #print "{0}<{1}".format(d2, d1)
-            return ammo_loc2
+        
     
     def __init__(self, id, team, settings = None, field_rects = None, field_grid = None, nav_mesh = None):
         self.id = id
@@ -49,10 +33,9 @@ class Agent(object):
         
     def action(self):
         
-        # shortcut for observations
+        # shorthand for observations
         obs = self.observation
-        
-        # TODO: create a static variable to remember where the ammopacks are located on the map        
+          
         # TODO: fill in roles for dead tanks
         # TODO: replace all distances with path lengths (or do ray traces at least)
         
@@ -64,6 +47,8 @@ class Agent(object):
             #self.__class__.CPS_LOC.sort(key = self.compare_spawn_dist)
             #print "CPS_LOC: ", self.__class__.CPS_LOC
         
+        # find the CPs we have not captured yet
+        not_poss_cps = filter(lambda x: x[2] != self.team, self.observation.cps)
         # find ammopacks within visual range
         ammopacks = filter(lambda x: x[2] == "Ammo", obs.objects)
         # compare visible ammopacks with the ones in memory
@@ -80,45 +65,20 @@ class Agent(object):
                 self.__class__.UNVISITED.remove(x)
         
         # decide who is scouting 
-        self.whoIsScout(obs)   
+        self.whoIsScout(obs, not_poss_cps)   
         
         # decide behaviour based on role    
-        if self.__class__.SCOUT == self.id:
-            self.scoutBehaviour(ammopacks)
+        if self.id in self.__class__.SCOUTS:
+            self.scoutBehaviour(ammopacks, obs)
         else:            
-            self.trooperBehaviour(obs)
-        
-                
-        # if I see an enemy within range and I have ammo and there's no teammate between us,
-        # shoot the motherfucker!         
-        shoot = False
-        if (obs.ammo > 0 and 
-            obs.foes and 
-            point_dist(obs.foes[0][0:2], obs.loc) < self.settings.max_range
-            and not line_intersects_grid(obs.loc, obs.foes[0][0:2], self.grid, self.settings.tilesize)):            
-            self.goal = obs.foes[0][0:2]
-            shoot = True
-
-        # use the mesh to find a path to my goal    
-        if self.goal is None:
-            print "no goal?"
-        path = find_path(obs.loc, self.goal, self.mesh, self.grid, self.settings.tilesize)
-        # use the path to decide the low level actions I need to take right now
-        if path:
-            dx = path[0][0] - obs.loc[0]
-            dy = path[0][1] - obs.loc[1]
-            turn = angle_fix(math.atan2(dy, dx) - obs.angle)            
-            if turn > self.settings.max_turn or turn < -self.settings.max_turn:
-                shoot = False                
-            speed = (dx**2 + dy**2)**0.5
-        else:
-            turn = 0
-            speed = 0
-        
+            self.trooperBehaviour(obs, ammopacks, not_poss_cps)       
+            
         #print extra information when selected
         self.printInfo(obs, ammopacks)
         
-        return (turn, speed, shoot)
+        # return specific (low-level) actions based on goal
+        return self.GoalToAction(obs)
+        
     
     def updateAmmopacks(self, obs, ammopacks):
         
@@ -152,56 +112,71 @@ class Agent(object):
                 else:
                     self.__class__.AMMOPACKS_LOC[pack_loc] = min( 20, self.__class__.AMMOPACKS_LOC[pack_loc] + 1 )
                 
-    def whoIsScout(self, obs):
+    def whoIsScout(self, obs, not_poss_cps):
+        
+        MAX_SCOUTS = 6 / (len(not_poss_cps)+1)
+        #print MAX_SCOUTS
         # if no one is scouting and I don't have ammo
-        # TODO: even if I have no ammo, maybe I still have something better I should be doing
-        if self.__class__.SCOUT == None and obs.ammo == 0:
-            self.__class__.SCOUT = self.id     
+        # and I am not too close to my goal (unless I have no goal)
+        if len(self.__class__.SCOUTS) < MAX_SCOUTS and obs.ammo == 0 and ( self.goal is None or point_dist(obs.loc, self.goal) > 30 ):
+            self.__class__.SCOUTS.append(self.id)     
             
         # If I am the scout and just found some ammo
         # then I stop being the scout
-        if self.__class__.SCOUT == self.id and obs.ammo > 0:
-            self.__class__.SCOUT = None
+        if self.id in self.__class__.SCOUTS and obs.ammo > 0:
+            self.__class__.SCOUTS.remove(self.id)
             self.goal = None       
         
-    def trooperBehaviour(self, obs):
+    def trooperBehaviour(self, obs, ammopacks, not_poss_cps):
+        
+        # remove goal if it is a CP we already control
+        if self.goal is not None and self.goal not in map(lambda x: x[0:2], not_poss_cps):
+            self.goal = None            
+        
         # if I have no goal, 
         if self.goal is None:
             # go to the CP closest to our spawn area that we don't own
-            not_poss_cps = filter(lambda x: x[2] != self.team, self.observation.cps)
             not_poss_cps.sort(key = self.compare_spawn_dist)
             
             if len(not_poss_cps) > 0:
                 self.goal = not_poss_cps[0][0:2]
-            # if we control all the CPs and I ahve ammo, 
+            # if we control all the CPs and I have ammo, 
             # go spawn camping
             elif obs.ammo > 0:
                 self.goal = (656 - self.__class__.SPAWN_LOC[0], self.__class__.SPAWN_LOC[1])
             else: # else pick a random CP 
                 self.goal = self.observation.cps[random.randint(0,2)][0:2]
                 
-        # TODO: if we pass close to an ammopack, we should get it
+        # if I pass close to an ammopack,
+        # then I should go get it
+        if ammopacks:
+            ammopacks_close = filter(lambda x: point_dist(x[0:2], obs.loc) < 30, ammopacks)
+            bestpack = self.getBestAmmopack(ammopacks_close, obs)
+            if bestpack is not None:
+                self.goal = bestpack[0:2]
+        
         # TODO: take into account the number of enemies near the CP?
                 
     
-    def scoutBehaviour(self, ammopacks):  
+    def scoutBehaviour(self, ammopacks, obs):  
                 
         #print "MY LOCATION: ", obs.loc
         
         # if there is an ammopack close by
         # go get it
-        if ammopacks: 
-            #TODO: check path length or ray to make sure we're not going around walls
-            closest_ammo = reduce(self.min_dist, ammopacks)
-            #print "CLOSEST AMMO: ", closest_ammo
-            self.goal = closest_ammo[0:2]
+        
+        if ammopacks:
+            bestpack = self.getBestAmmopack(ammopacks, obs) 
+            if bestpack is not None:
+                self.goal = bestpack[0:2]
             #print "Ammopack right ahead!"
+                        
         # else, check my list of ammopack locations and go towards the best one
-        elif len(self.__class__.AMMOPACKS_LOC) > 0:
+        if self.goal is None and len(self.__class__.AMMOPACKS_LOC) > 0:
             best_ammo_loc = reduce(self.min_ammo_dist, self.__class__.AMMOPACKS_LOC)
             #print "{0}\t{1}".format(closest_ammo, self.__class__.AMMOPACKS_LOC)
             # go there if you think you have a good chance of finding ammo there
-            if self.__class__.AMMOPACKS_LOC[best_ammo_loc] > 10:
+            if self.__class__.AMMOPACKS_LOC[best_ammo_loc] > 10 or len(self.__class__.UNVISITED) == 0:
                 self.goal = best_ammo_loc
                 #print "There was an ammopack around here somewhere..."
                 
@@ -211,15 +186,55 @@ class Agent(object):
             self.goal = closest_node       
             #print "Let's go exploring!"
             
+    def GoalToAction(self, obs):
+        
+        # if I see an enemy within range and I have ammo 
+        # there's no wall (TODO: or friendly) between us,
+        # shoot the motherfucker!  
+        shoot = False
+        if (obs.ammo > 0 and obs.foes and 
+            point_dist(obs.foes[0][0:2], obs.loc) < self.settings.max_range
+            and not line_intersects_grid(obs.loc, obs.foes[0][0:2], self.grid, self.settings.tilesize)):            
+            self.goal = obs.foes[0][0:2]
+            shoot = True
+        
+        # use the mesh to find a path to my goal    
+        path = find_path(obs.loc, self.goal, self.mesh, self.grid, self.settings.tilesize)
+        
+        # use the path to decide the low level actions I need to take right now
+        if path:
+            dx = path[0][0] - obs.loc[0]
+            dy = path[0][1] - obs.loc[1]
+            turn = angle_fix(math.atan2(dy, dx) - obs.angle)            
+            if turn > self.settings.max_turn or turn < -self.settings.max_turn:
+                shoot = False                
+            speed = (dx**2 + dy**2)**0.5
+        else:
+            turn = 0
+            speed = 0
+        
+        return (turn, speed, shoot)
+    
+    def getBestAmmopack(self, ammopacks, obs):
+        #TODO: check path length or ray trace to make sure we're not going around walls
+        everyone = obs.friends + obs.foes
+        everyone.append(obs.loc)
+        #print everyone
+        good_ammopacks = filter(lambda pack: self.whoIsTheClosest(everyone, pack) == obs.loc, ammopacks)
+        if len(good_ammopacks) > 0:
+            return reduce(self.min_dist, good_ammopacks)
+        else:
+            return None   
+    
     def printInfo(self, obs, ammopacks):
         if obs.selected:
             #print "Scouting: {0}".format(self.__class__.SCOUT == self.id) 
             #print "Goal: {0}".format(self.goal)
             #print "Visible ammo: {0}".format(ammopacks)
             #print "Ammo locations: {0}".format(self.__class__.AMMOPACKS_LOC)
-            print "Ammo locations number: {0}".format(len(self.__class__.AMMOPACKS_LOC))
-
-    
+            #print "Ammo locations number: {0}".format(len(self.__class__.AMMOPACKS_LOC))
+            pass
+        
     def debug(self, surface):
         """ Allows the agents to draw on the game UI,
             Refer to the pygame reference to see how you can
@@ -244,4 +259,53 @@ class Agent(object):
             store any learned variables and write logs/reports.
         """
         pass    
+    
+    
+    
+    
+    
+    # ===== Auxilliary functions =====
         
+    def compare_spawn_dist(self, cp_loc):
+        path = find_path(self.observation.loc, cp_loc[0:2], self.mesh, self.grid, self.settings.tilesize)
+        return self.path_length(self.__class__.SPAWN_LOC, path)
+    
+    def path_length(self, prev, path):
+        length = 0
+        for node in path:
+            length += point_dist(prev, node)
+            prev = node
+        #print "{2} {0} - {1}".format(path, length, self.observation.loc)
+        return length
+    
+    def min_dist(self, loc1, loc2):
+        if point_dist(self.observation.loc, loc1[0:2]) < point_dist(self.observation.loc, loc2[0:2]):
+            return loc1[0:2]
+        else:
+            return loc2[0:2]
+        
+    def min_ammo_dist(self, ammo_loc1, ammo_loc2):
+        WEIGHT = 750
+        d1 = (point_dist(self.observation.loc, ammo_loc1) + WEIGHT / self.__class__.AMMOPACKS_LOC[ammo_loc1] )
+        d2 = (point_dist(self.observation.loc, ammo_loc2) + WEIGHT / self.__class__.AMMOPACKS_LOC[ammo_loc2] )
+        if (d1 < d2):
+            #print "{0}<{1}".format(d1, d2)
+            return ammo_loc1
+        else:
+            #print "{0}<{1}".format(d2, d1)
+            return ammo_loc2
+        
+    def whoIsTheClosest(self, loc_list, target):
+        min_dist = float("inf")
+        min_loc = None
+        for loc in loc_list:
+            dist = point_dist(loc, target)
+            if dist < min_dist:
+                min_dist = dist
+                min_loc = loc
+        
+        return min_loc
+            
+
+    
+    
