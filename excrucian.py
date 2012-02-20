@@ -136,12 +136,15 @@ class Agent(object):
         # if I have no goal, 
         if self.goal is None:
             # go to the CP closest to our spawn area that we don't own
+            # TODO: Avoid doing this every round!
+            # TODO: Base sorting on current distance instead of distance from spawn area!
             not_poss_cps.sort(key = self.compare_spawn_dist)
             
             if len(not_poss_cps) > 0:
                 self.goal = not_poss_cps[0][0:2]
             # if we control all the CPs and I have ammo, 
             # go spawn camping
+            # TODO: Prevent shooting agents in the spawn area that are not spawned yet.
             elif obs.ammo > 0:
                 self.goal = (656 - self.__class__.SPAWN_LOC[0], self.__class__.SPAWN_LOC[1])
             else: # else pick a random CP 
@@ -186,7 +189,11 @@ class Agent(object):
             self.goal = closest_node       
             #print "Let's go exploring!"
             
+        # TODO: If I pass close to a CP we don't control and no one else is around, I should capture it
+            
     def GoalToAction(self, obs):
+        
+        # TODO: Fix agents running with top speed when they should be rotating in place.
         
         # if I see an enemy within range and I have ammo 
         # there's no wall (TODO: or friendly) between us,
