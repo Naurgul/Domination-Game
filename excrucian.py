@@ -6,6 +6,8 @@ class Agent(object):
     
     SPAWN_LOC = []
     AMMOPACKS_LOC = {}
+    AMMOPACKS_UPDATED = []
+    LAST_ROUND = -1
     #CPS_LOC = []
     
     # TODO: Remove magic numbers 
@@ -92,6 +94,11 @@ class Agent(object):
             #print "AMMOPACKS_X: ", pack        
             self.__class__.AMMOPACKS_LOC[(pack[0], pack[1])] = 20
             self.__class__.AMMOPACKS_LOC[(656 - pack[0], pack[1])] = 20 # 656 is the width of the screen in pixels
+            
+        # ammopacks can be updated at most once per turn
+        # empty the ammo location blacklist if it's a new round
+        if self.newRound():
+           self.__class__.AMMOPACKS_UPDATED = []   
 
         
         # for ammopacks that should be visible:
@@ -114,8 +121,9 @@ class Agent(object):
                         self.__class__.AMMOPACKS_LOC[pack_loc] = 20
                     elif self.__class__.AMMOPACKS_LOC[pack_loc] == 20:
                         self.__class__.AMMOPACKS_LOC[pack_loc] = 1
-                    else:
+                    elif pack_loc in self.__class__.AMMOPACKS_UPDATED:
                         self.__class__.AMMOPACKS_LOC[pack_loc] = min( 20, self.__class__.AMMOPACKS_LOC[pack_loc] + 1 )
+                        self.__class__.AMMOPACKS_UPDATED.append[pack_loc]
                 else:
                     self.__class__.AMMOPACKS_LOC[pack_loc] = min( 20, self.__class__.AMMOPACKS_LOC[pack_loc] + 1 )
                 
@@ -367,6 +375,14 @@ class Agent(object):
         
         return min_loc
             
+    def newRound(self):
+        if self.observation.step > self.__class__.LAST_ROUND:
+            self.__class__.LAST_ROUND = self.observation.step
+            return True
+        else:
+            self.__class__.LAST_ROUND = self.observation.step
+            return False
+        
 
     
     
