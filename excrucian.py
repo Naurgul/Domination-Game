@@ -318,16 +318,37 @@ class Agent(object):
         #print "{2} {0} - {1}".format(path, length, self.observation.loc)
         return length
     
-    def min_dist(self, loc1, loc2):
+    def min_dist_fast(self, loc1, loc2):
         if point_dist(self.observation.loc, loc1[0:2]) < point_dist(self.observation.loc, loc2[0:2]):
             return loc1[0:2]
         else:
             return loc2[0:2]
         
-    def min_ammo_dist(self, ammo_loc1, ammo_loc2):
+    def min_dist(self, loc1, loc2):
+        path1 = find_path(self.observation.loc, loc1[0:2], self.mesh, self.grid, self.settings.tilesize)
+        path2 = find_path(self.observation.loc, loc2[0:2], self.mesh, self.grid, self.settings.tilesize)
+        if self.path_length(self.observation.loc, path1) < self.path_length(self.observation.loc, path2):
+            return loc1[0:2]
+        else:
+            return loc2[0:2]
+        
+    def min_ammo_dist_fast(self, ammo_loc1, ammo_loc2):
         WEIGHT = 750
         d1 = (point_dist(self.observation.loc, ammo_loc1) + WEIGHT / self.__class__.AMMOPACKS_LOC[ammo_loc1] )
         d2 = (point_dist(self.observation.loc, ammo_loc2) + WEIGHT / self.__class__.AMMOPACKS_LOC[ammo_loc2] )
+        if (d1 < d2):
+            #print "{0}<{1}".format(d1, d2)
+            return ammo_loc1
+        else:
+            #print "{0}<{1}".format(d2, d1)
+            return ammo_loc2
+        
+    def min_ammo_dist(self, ammo_loc1, ammo_loc2):
+        WEIGHT = 750
+        path1 = find_path(self.observation.loc, ammo_loc1[0:2], self.mesh, self.grid, self.settings.tilesize)
+        path2 = find_path(self.observation.loc, ammo_loc2[0:2], self.mesh, self.grid, self.settings.tilesize)
+        d1 = (self.path_length(self.observation.loc, path1) + WEIGHT / self.__class__.AMMOPACKS_LOC[ammo_loc1] )
+        d2 = (self.path_length(self.observation.loc, path2) + WEIGHT / self.__class__.AMMOPACKS_LOC[ammo_loc2] )
         if (d1 < d2):
             #print "{0}<{1}".format(d1, d2)
             return ammo_loc1
