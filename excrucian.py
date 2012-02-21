@@ -4,14 +4,12 @@ class Agent(object):
     SCOUTS = []
     UNVISITED = None
     
-    SPAWN_LOC = None
+    SPAWN_LOC = []
     AMMOPACKS_LOC = {}
     #CPS_LOC = []
     
     # TODO: Remove magic numbers 
-        
-        
-    
+
     def __init__(self, id, team, settings = None, field_rects = None, field_grid = None, nav_mesh = None):
         self.id = id
         self.team = team
@@ -41,8 +39,14 @@ class Agent(object):
         
         #save spawn area
         #this code only runs once, in the beginning of each match!
-        if self.__class__.SPAWN_LOC is None:
-            self.__class__.SPAWN_LOC = obs.loc
+        
+        # TODO: do not shoot if enemies are in the spawn area        
+        
+        if len(self.__class__.SPAWN_LOC) < 6:
+            self.__class__.SPAWN_LOC.append(obs.loc)
+            
+        #print "Spawn loc: ", self.__class__.SPAWN_LOC
+            #self.__class__.SPAWN_LOC.append(obs.loc)
             #self.__class__.CPS_LOC = obs.cps[:]
             #self.__class__.CPS_LOC.sort(key = self.compare_spawn_dist)
             #print "CPS_LOC: ", self.__class__.CPS_LOC
@@ -99,10 +103,13 @@ class Agent(object):
         if self.__class__.AMMOPACKS_LOC != {}:
             for pack_loc in self.__class__.AMMOPACKS_LOC:
                 if point_dist(pack_loc, obs.loc) < 100 :
-                    found = False
-                    for pack in ammopacks:
-                        if pack[0:2] == pack_loc:
-                            found = True
+
+                    #found = False
+                    #for pack in ammopacks:
+                        #if pack[0:2] == pack_loc:
+                            #found = True
+                    
+                    found = pack_loc in map(lambda x:x[0:2], ammopacks)
                     if found:
                         self.__class__.AMMOPACKS_LOC[pack_loc] = 20
                     elif self.__class__.AMMOPACKS_LOC[pack_loc] == 20:
@@ -125,7 +132,7 @@ class Agent(object):
         # then I stop being the scout
         if self.id in self.__class__.SCOUTS and obs.ammo > 0:
             self.__class__.SCOUTS.remove(self.id)
-            self.goal = None       
+            self.goal = None
         
     def trooperBehaviour(self, obs, ammopacks, not_poss_cps):
         
@@ -138,15 +145,15 @@ class Agent(object):
             # go to the CP closest to our spawn area that we don't own
             # TODO: Avoid doing this every round!
             # TODO: Base sorting on current distance instead of distance from spawn area!
-            not_poss_cps.sort(key = self.compare_spawn_dist)
             
             if len(not_poss_cps) > 0:
-                self.goal = not_poss_cps[0][0:2]
+                closest_cp = reduce(self.min_dist, not_poss_cps)
+                self.goal = closest_cp[0:2]
             # if we control all the CPs and I have ammo, 
             # go spawn camping
             # TODO: Prevent shooting agents in the spawn area that are not spawned yet.
             elif obs.ammo > 0:
-                self.goal = (656 - self.__class__.SPAWN_LOC[0], self.__class__.SPAWN_LOC[1])
+                self.goal = (656 - self.__class__.SPAWN_LOC[0][0], self.__class__.SPAWN_LOC[0][1])
             else: # else pick a random CP 
                 self.goal = self.observation.cps[random.randint(0,2)][0:2]
                 
@@ -199,12 +206,38 @@ class Agent(object):
         # there's no wall (TODO: or friendly) between us,
         # shoot the motherfucker!  
         shoot = False
-        if (obs.ammo > 0 and obs.foes and 
-            point_dist(obs.foes[0][0:2], obs.loc) < self.settings.max_range
-            and not line_intersects_grid(obs.loc, obs.foes[0][0:2], self.grid, self.settings.tilesize)):            
-            self.goal = obs.foes[0][0:2]
-            shoot = True
         
+        #if (obs.ammo > 0 and obs.foes and 
+            #point_dist(obs.foes[0][0:2], obs.loc) < self.settings.max_range
+            #and not line_intersects_grid(obs.loc, obs.foes[0][0:2], self.grid, self.settings.tilesize)):            
+            #self.goal = obs.foes[0][0:2]
+            #shoot = True
+            
+        if obs.ammo > 0:
+            closeToEnemysSpawn = False
+            
+            # I have ammo. I don't shoot at enemy which is respawning
+            
+            for spawn_loc in self.__class__.SPAWN_LOC:
+                if point_dist(spawn_loc, obs.loc) < 35:
+                    closeToEnemysSpawn = True
+                    
+            # If I am not in the enemy's spawn area and I see some enemies in my proximity and I can shoot them without harming my friends, I do it !
+            
+            if obs.foes and not closeToEnemysSpawn:
+                for enemy in obs.foes:
+                    # I can shoot this enemy - he is in my shooting range and there is no wall blocking me
+                    if point_dist(enemy[0:2], obs.loc) < self.settings.max_range and not    line_intersects_grid(obs.loc, enemy[0:2], self.grid, self.settings.tilesize):
+                    # But I do not shoot if a friend is between me and the enemy
+                        shoot = True
+                        
+                        for friend in obs.friends:
+                            if line_intersects_circ(obs.loc, enemy[0:2], friend[0:2], 10):
+                                shoot = False
+                        
+                        if shoot == True:
+                            self.goal = enemy[0:2]
+            
         # use the mesh to find a path to my goal    
         path = find_path(obs.loc, self.goal, self.mesh, self.grid, self.settings.tilesize)
         
