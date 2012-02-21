@@ -2,7 +2,7 @@
 docs/Makefile
 docs/_*
 _tmp/*
-replays/*
+data/replays/*
 t/*
 *.DS_Store
 domination/test.pickle
