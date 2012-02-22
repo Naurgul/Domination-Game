@@ -5,21 +5,25 @@ class Agent(object):
     UNVISITED = None
     SPAWN_LOC = []
     AMMOPACKS_LOC = {}
+    AMMOPACKS_UPDATED = []
+    LAST_ROUND = -1
     
     pickle_file = open('qvalues.pickle', 'rb')
     QVALUES = pickle.load(pickle_file)
     pickle_file.close()
     
-    LEARNING_RATE = 0.8
-    DISCOUNT_FACTOR = 0.1
+    LEARNING_RATE = 0.7
+    DISCOUNT_FACTOR = 0.6
+    EXPLORE_EXPLOIT_RATIO = 0.5
     
-    # TODO: Remove magic numbers 
+    # TODO: Remove magic numbers
+
+    # ===== Main functions ===============================================================================
         
     def __init__(self, id, team, settings = None, field_rects = None, field_grid = None, nav_mesh = None):
         self.id = id
         self.team = team
         self.r_old = 0
-        self.s_old = 111111
         self.mesh = nav_mesh
         self.grid = field_grid
         self.settings = settings
@@ -58,14 +62,14 @@ class Agent(object):
         
         self.s_new = self.getState(obs, not_poss_cps)
         r = self.getReward()
-        self.updateQ(self.s_old, self.a_old, self.s_new, r)
+        if ((self.s_old,self.a_old) in self.__class__.QVALUES)
+        	self.updateQ(self.s_old, self.a_old, self.s_new, r)
         goal = self.decideAction(self.s_new)
         self.goal = s_new[action]
         
-        #self.s_old = self.s_new
-        #self.a_old = self.goal
-        self.getReward()
-        self.goal = reduce(self.min_dist, not_poss_cps)[0:2]
+        self.s_old = self.s_new
+        self.a_old = self.goal
+        #self.goal = reduce(self.min_dist, not_poss_cps)[0:2] # Just for testing
         
         #print extra information when selected
         self.printInfo(obs, ammopacks)
@@ -79,11 +83,30 @@ class Agent(object):
         # there's no wall (TODO: or friendly) between us,
         # shoot the motherfucker!  
         shoot = False
-        if (obs.ammo > 0 and obs.foes and 
-            point_dist(obs.foes[0][0:2], obs.loc) < self.settings.max_range
-            and not line_intersects_grid(obs.loc, obs.foes[0][0:2], self.grid, self.settings.tilesize)):            
-            self.goal = obs.foes[0][0:2]
-            shoot = True
+        if obs.ammo > 0:
+            closeToEnemysSpawn = False
+            
+            # I have ammo. I don't shoot at enemy which is respawning
+            
+            for spawn_loc in self.__class__.SPAWN_LOC:
+                if point_dist(spawn_loc, obs.loc) < 35:
+                    closeToEnemysSpawn = True
+                    
+            # If I am not in the enemy's spawn area and I see some enemies in my proximity and I can shoot them without harming my friends, I do it !
+            
+            if obs.foes and not closeToEnemysSpawn:
+                for enemy in obs.foes:
+                    # I can shoot this enemy - he is in my shooting range and there is no wall blocking me
+                    if point_dist(enemy[0:2], obs.loc) < self.settings.max_range and not    line_intersects_grid(obs.loc, enemy[0:2], self.grid, self.settings.tilesize):
+                    # But I do not shoot if a friend is between me and the enemy
+                        shoot = True
+                        
+                        for friend in obs.friends:
+                            if line_intersects_circ(obs.loc, enemy[0:2], friend[0:2], 10):
+                                shoot = False
+                        
+                        if shoot == True:
+                            self.goal = enemy[0:2]
         
         # use the mesh to find a path to my goal    
         path = find_path(obs.loc, self.goal, self.mesh, self.grid, self.settings.tilesize)
@@ -126,7 +149,7 @@ class Agent(object):
 		pickle.dump(self.__class__.QVALUES, output)
 		output.close()
     
-    # ===== Q-learning functions =====
+    # ===== Q-learning functions ===============================================================================
     
     def getState(self, obs, not_poss_cps):
         cp_close = reduce(self.min_dist, not_poss_cps)
@@ -155,43 +178,45 @@ class Agent(object):
         return r
     
     def updateQ(self, s_old, a_old, s_new, r):
-        q_index = s_old + a_old
+        q_index = (s_old,a_old)
         if (q_index in self.__class__.QVALUES):
-            self.__class__.QVALUES[q_index]=10
-        else:
-            self.__class__.QVALUES[q_index]=10
+        	q_old=self.__class__.QVALUES[q_index]
+		else:
+            q_old=0
+        q_max=max(self.__class__.QVALUES[(s_new,0)],self.__class__.QVALUES[(s_new,1)],self.__class__.QVALUES[(s_new,2)],self.__class__.QVALUES[(s_new,3)])
+        self.__class__.QVALUES[q_index]=q_old+self.__class__.LEARNING_RATE*(r+self.__class__.DISCOUNT_FACTOR*q_max - q_old)    
+        
     
     def decideAction(self, s_new):
-        action = 1
-        qvalue = self.__class__.QVALUES[s_new+action]
-        
-        if (self.__class__.QVALUES[s_new+2] > qvalue):
-            action = 2
-            qvalue = self.__class__.QVALUES[s_new+action]
-            
-        if (self.__class__.QVALUES[s_new+3] > qvalue):
-            action = 3
-            qvalue = self.__class__.QVALUES[s_new+action]
-        
-        if (self.__class__.QVALUES[s_new+4] > qvalue):
-            action = 4
-            qvalue = self.__class__.QVALUES[s_new+action]
-            
-        # TODO Qlearning Exploration
+    	# Explore/Exploit ratio
+    	if (random.randint(1, 10) > self.__class__.EXPLORE_EXPLOIT_RATIO*10 ):
+        	action = random.randint(0, 3)
+    	else:
+			action = 0
+			q_value = -9999999
+			for a in range(0, 3):
+				if (self.__class__.QVALUES[(s_new,a)] > q_value):
+				action = a
+				q_value = self.__class__.QVALUES[(s_new,a)]
 
         return action
     
-    # ===== AmmoPack functions =====
+    # ===== AmmoPack functions ===============================================================================
 
     def updateAmmopacks(self, obs, ammopacks):
+        
         # if I see an ammopack for the first time
         # add both that one and its symmetric to the list of ammopack locations
         for pack in ammopacks:
             #print "AMMOPACKS_X: ", pack        
             self.__class__.AMMOPACKS_LOC[(pack[0], pack[1])] = 20
             self.__class__.AMMOPACKS_LOC[(656 - pack[0], pack[1])] = 20 # 656 is the width of the screen in pixels
+            
+        # ammopacks can be updated at most once per turn
+        # empty the ammo location blacklist if it's a new round
+        if self.newRound():
+           self.__class__.AMMOPACKS_UPDATED = []   
 
-        # TODO add some kind of boolean that indicates if a teammember already updated the time
         # for ammopacks that should be visible:
         #   t=20 if I see them
         #   t=0 if I don't see them
@@ -201,16 +226,20 @@ class Agent(object):
         if self.__class__.AMMOPACKS_LOC != {}:
             for pack_loc in self.__class__.AMMOPACKS_LOC:
                 if point_dist(pack_loc, obs.loc) < 100 :
-                    found = False
-                    for pack in ammopacks:
-                        if pack[0:2] == pack_loc:
-                            found = True
+
+                    #found = False
+                    #for pack in ammopacks:
+                        #if pack[0:2] == pack_loc:
+                            #found = True
+                    
+                    found = pack_loc in map(lambda x:x[0:2], ammopacks)
                     if found:
                         self.__class__.AMMOPACKS_LOC[pack_loc] = 20
                     elif self.__class__.AMMOPACKS_LOC[pack_loc] == 20:
                         self.__class__.AMMOPACKS_LOC[pack_loc] = 1
-                    else:
+                    elif pack_loc in self.__class__.AMMOPACKS_UPDATED:
                         self.__class__.AMMOPACKS_LOC[pack_loc] = min( 20, self.__class__.AMMOPACKS_LOC[pack_loc] + 1 )
+                        self.__class__.AMMOPACKS_UPDATED.append[pack_loc]
                 else:
                     self.__class__.AMMOPACKS_LOC[pack_loc] = min( 20, self.__class__.AMMOPACKS_LOC[pack_loc] + 1 )
     
@@ -223,7 +252,7 @@ class Agent(object):
         if len(good_ammopacks) > 0:
             return reduce(self.min_dist, good_ammopacks)
         else:
-            return None   
+            return None  
             
     # ===== Auxilliary functions =====           
     
@@ -270,3 +299,11 @@ class Agent(object):
                 min_loc = loc
         
         return min_loc
+
+    def newRound(self):
+        if self.observation.step > self.__class__.LAST_ROUND:
+            self.__class__.LAST_ROUND = self.observation.step
+            return True
+        else:
+            self.__class__.LAST_ROUND = self.observation.step
+            return False
