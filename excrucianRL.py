@@ -10,6 +10,9 @@ class Agent(object):
     QVALUES = pickle.load(pickle_file)
     pickle_file.close()
     
+    LEARNING_RATE = 0.8
+    DISCOUNT_FACTOR = 0.1
+    
     # TODO: Remove magic numbers 
         
     def __init__(self, id, team, settings = None, field_rects = None, field_grid = None, nav_mesh = None):
@@ -33,22 +36,15 @@ class Agent(object):
         self.selected = observation.selected
         
     def action(self):
-        # shorthand for observations
         obs = self.observation
-          
-        # TODO: fill in roles for dead tanks
-        # TODO: replace all distances with path lengths (or do ray traces at least)
         
-        #save spawn area
         #this code only runs once, in the beginning of each match!
         if len(self.__class__.SPAWN_LOC) < 6:
             self.__class__.SPAWN_LOC.append(obs.loc)
-            #self.__class__.CPS_LOC = obs.cps[:]
-            #self.__class__.CPS_LOC.sort(key = self.compare_spawn_dist)
-            #print "CPS_LOC: ", self.__class__.CPS_LOC
         
         # find the CPs we have not captured yet
         not_poss_cps = filter(lambda x: x[2] != self.team, self.observation.cps)
+        
         # find ammopacks within visual range
         ammopacks = filter(lambda x: x[2] == "Ammo", obs.objects)
         # compare visible ammopacks with the ones in memory
@@ -60,11 +56,11 @@ class Agent(object):
             if point_dist(obs.loc, x) < self.settings.tilesize:
                 self.__class__.UNVISITED.remove(x)
         
-        #self.s_new = self.getState(obs, not_poss_cps)
-        #r = self.getReward()
-        #self.updateQ(self.s_old, self.a_old, self.s_new, r)
-        #goal = self.decideAction(self.s_new)
-        #self.goal = s_new[action]
+        self.s_new = self.getState(obs, not_poss_cps)
+        r = self.getReward()
+        self.updateQ(self.s_old, self.a_old, self.s_new, r)
+        goal = self.decideAction(self.s_new)
+        self.goal = s_new[action]
         
         #self.s_old = self.s_new
         #self.a_old = self.goal
@@ -108,21 +104,13 @@ class Agent(object):
     
     def printInfo(self, obs, ammopacks):
         if obs.selected:
-            #print "Scouting: {0}".format(self.__class__.SCOUT == self.id) 
-            #print "Goal: {0}".format(self.goal)
+            print "Goal: {0}".format(self.goal)
             #print "Visible ammo: {0}".format(ammopacks)
             #print "Ammo locations: {0}".format(self.__class__.AMMOPACKS_LOC)
             #print "Ammo locations number: {0}".format(len(self.__class__.AMMOPACKS_LOC))
             pass
         
     def debug(self, surface):
-        """ Allows the agents to draw on the game UI,
-            Refer to the pygame reference to see how you can
-            draw on a pygame.surface. The given surface is
-            not cleared automatically. Additionally, this
-            function will only be called when the renderer is
-            active, and it will only be called for the active team.
-        """
         import pygame
         # First agent clears the screen
         if self.id == 0:
@@ -133,11 +121,6 @@ class Agent(object):
                 pygame.draw.line(surface,(0,0,0),self.observation.loc, self.goal)
         
     def finalize(self, interrupted=False):
-        """ This function is called after the game ends, 
-            either due to time/score limits, or due to an
-            interrupt (CTRL+C) by the user. Use it to
-            store any learned variables and write logs/reports.
-        """
         if (self.id == 0):
         	output = open('qvalues.pickle', 'wb')
 		pickle.dump(self.__class__.QVALUES, output)
@@ -156,16 +139,16 @@ class Agent(object):
         path_ap = find_path(obs.loc, ammo_close, self.mesh, self.grid, self.settings.tilesize)
         d_ap = self.path_length(obs.loc, path_ap)
         d_ap = min(round(math.log(d_ap/self.settings.tilesize+1,2)),5)
-        #d_ap = 1
 
         s = (656 - self.__class__.SPAWN_LOC[0], self.__class__.SPAWN_LOC[1])
     	path_s = find_path(obs.loc, s, self.mesh, self.grid, self.settings.tilesize)
         d_s = self.path_length(obs.loc, path_s)
         
-        state=d_cp*1000000 + d_ap*100000 + obs.ammo*10000 + 3-len(not_poss_cps)*1000 + len(self.__class__.AMMOPACKS_LOC)*100 + d_s*10
-        return (state,cp_close[0:2],ammo_close[0:2],s[0:2]) # d_cp, d_ap, obs.ammo, 3-len(not_poss_cps), len(self.__class__.AMMOPACKS_LOC), d_s
+        state=(d_cp, d_ap, obs.ammo, 3-len(not_poss_cps), len(self.__class__.AMMOPACKS_LOC), d_s)
+        return (state,path_cp[0:2],path_ap[0:2],path_s[0:2]) # 
     
     def getReward(self):
+    	# TODO figure out of reward #cp is better
         self.r_new = self.observation.score[self.team]
         r = self.r_new - self.r_old
         self.r_old = self.r_new
