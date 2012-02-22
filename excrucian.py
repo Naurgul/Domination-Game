@@ -75,7 +75,7 @@ class Agent(object):
         
         # decide behaviour based on role    
         if self.id in self.__class__.SCOUTS:
-            self.scoutBehaviour(ammopacks, obs)
+            self.scoutBehaviour(ammopacks, obs, not_poss_cps)
         else:            
             self.trooperBehaviour(obs, ammopacks, not_poss_cps)       
             
@@ -144,6 +144,10 @@ class Agent(object):
         
     def trooperBehaviour(self, obs, ammopacks, not_poss_cps):
         
+        # TODO: If enemy is nearest to CP we own, start going back to recapture
+        # TODO: Same situation, if we have ammo, set goal to enemy
+        # TODO: Change goal if too many agents have the same goal as you do 
+        
         # remove goal if it is a CP we already control
         if self.goal is not None and self.goal not in map(lambda x: x[0:2], not_poss_cps):
             self.goal = None            
@@ -176,7 +180,7 @@ class Agent(object):
         # TODO: take into account the number of enemies near the CP?
                 
     
-    def scoutBehaviour(self, ammopacks, obs):  
+    def scoutBehaviour(self, ammopacks, obs, not_poss_cps):  
                 
         #print "MY LOCATION: ", obs.loc
         
@@ -198,17 +202,23 @@ class Agent(object):
                 self.goal = best_ammo_loc
                 #print "There was an ammopack around here somewhere..."
                 
-        # if all else fails, start exploring unvisited nodes
-        if self.goal is None:                    
+        # if we have not found all the ammo locations, start exploring unvisited nodes
+        if self.goal is None and len(self.__class__.AMMOPACKS_LOC) < 6:                    
             closest_node = reduce(self.min_dist, self.__class__.UNVISITED)
             self.goal = closest_node       
             #print "Let's go exploring!"
+
+        #if all else fails, stop being a scout
+        if self.goal is None:
+            self.__class__.SCOUTS.remove(self.id)
+            self.trooperBehaviour(obs, ammopacks, not_poss_cps)
             
         # TODO: If I pass close to a CP we don't control and no one else is around, I should capture it
             
     def GoalToAction(self, obs):
         
         # TODO: Fix agents running with top speed when they should be rotating in place.
+        # TODO: Jiggle around if you're not going anywhere
         
         # if I see an enemy within range and I have ammo 
         # there's no wall (TODO: or friendly) between us,
@@ -226,13 +236,13 @@ class Agent(object):
             
             # I have ammo. I don't shoot at enemy which is respawning
             
-            for spawn_loc in self.__class__.SPAWN_LOC:
-                if point_dist(spawn_loc, obs.loc) < 35:
-                    closeToEnemysSpawn = True
+            #for spawn_loc in self.__class__.SPAWN_LOC:
+                #if point_dist((656 - spawn_loc[0], spawn_loc[1]), obs.loc) < 35:
+                    #closeToEnemysSpawn = True
                     
             # If I am not in the enemy's spawn area and I see some enemies in my proximity and I can shoot them without harming my friends, I do it !
             
-            if obs.foes and not closeToEnemysSpawn:
+            if obs.foes:
                 for enemy in obs.foes:
                     # I can shoot this enemy - he is in my shooting range and there is no wall blocking me
                     if point_dist(enemy[0:2], obs.loc) < self.settings.max_range and not    line_intersects_grid(obs.loc, enemy[0:2], self.grid, self.settings.tilesize):
@@ -241,6 +251,11 @@ class Agent(object):
                         
                         for friend in obs.friends:
                             if line_intersects_circ(obs.loc, enemy[0:2], friend[0:2], 10):
+                                shoot = False
+
+                        # do not shoot at respawning enemy
+                        for spawn_loc in self.__class__.SPAWN_LOC:
+                            if point_dist((656 - spawn_loc[0], spawn_loc[1]), enemy) < 16:
                                 shoot = False
                         
                         if shoot == True:
