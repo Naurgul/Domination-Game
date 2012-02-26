@@ -10,7 +10,18 @@ class Agent(object):
     LAST_ROUND = -1
     #CPS_LOC = []
     
-    # TODO: Remove magic numbers 
+    # ===== Constants =====
+    FIRST_AGENT_ID = 0
+    TEAM_SIZE = 6
+    MAP_WIDTH = 656
+    SHORT_DISTANCE = 30
+    VERY_SHORT_DISTANCE = 10
+    NUM_POINTS = 3
+    NUM_AMMO_LOCS = 6
+    AMMO_EXPECTATION_WEIGHT = 750
+    
+    # ===============
+    
 
     def __init__(self, id, team, settings = None, field_rects = None, field_grid = None, nav_mesh = None):
         self.id = id
@@ -23,7 +34,7 @@ class Agent(object):
         
         self.__class__.UNVISITED = self.mesh.keys()
         
-        if id == 0:
+        if id == self.__class__.FIRST_AGENT_ID:
             self.all_agents = self.__class__.all_agents = []
         self.all_agents.append(self)
     
@@ -44,7 +55,7 @@ class Agent(object):
         
         # TODO: do not shoot if enemies are in the spawn area        
         
-        if len(self.__class__.SPAWN_LOC) < 6:
+        if len(self.__class__.SPAWN_LOC) < self.__class__.TEAM_SIZE:
             self.__class__.SPAWN_LOC.append(obs.loc)
             
         #print "Spawn loc: ", self.__class__.SPAWN_LOC
@@ -92,8 +103,8 @@ class Agent(object):
         # add both that one and its symmetric to the list of ammopack locations
         for pack in ammopacks:
             #print "AMMOPACKS_X: ", pack        
-            self.__class__.AMMOPACKS_LOC[(pack[0], pack[1])] = 20
-            self.__class__.AMMOPACKS_LOC[(656 - pack[0], pack[1])] = 20 # 656 is the width of the screen in pixels
+            self.__class__.AMMOPACKS_LOC[(pack[0], pack[1])] = self.settings.ammo_rate
+            self.__class__.AMMOPACKS_LOC[(self.__class__.MAP_WIDTH - pack[0], pack[1])] = self.settings.ammo_rate
             
         # ammopacks can be updated at most once per turn
         # empty the ammo location blacklist if it's a new round
@@ -109,7 +120,7 @@ class Agent(object):
         
         if self.__class__.AMMOPACKS_LOC != {}:
             for pack_loc in self.__class__.AMMOPACKS_LOC:
-                if point_dist(pack_loc, obs.loc) < 100 :
+                if point_dist(pack_loc, obs.loc) < self.settings.max_see :
 
                     #found = False
                     #for pack in ammopacks:
@@ -118,22 +129,22 @@ class Agent(object):
                     
                     found = pack_loc in map(lambda x:x[0:2], ammopacks)
                     if found:
-                        self.__class__.AMMOPACKS_LOC[pack_loc] = 20
-                    elif self.__class__.AMMOPACKS_LOC[pack_loc] == 20:
+                        self.__class__.AMMOPACKS_LOC[pack_loc] = self.settings.ammo_rate
+                    elif self.__class__.AMMOPACKS_LOC[pack_loc] == self.settings.ammo_rate:
                         self.__class__.AMMOPACKS_LOC[pack_loc] = 1
                     elif pack_loc in self.__class__.AMMOPACKS_UPDATED:
-                        self.__class__.AMMOPACKS_LOC[pack_loc] = min( 20, self.__class__.AMMOPACKS_LOC[pack_loc] + 1 )
+                        self.__class__.AMMOPACKS_LOC[pack_loc] = min( self.settings.ammo_rate, self.__class__.AMMOPACKS_LOC[pack_loc] + 1 )
                         self.__class__.AMMOPACKS_UPDATED.append[pack_loc]
                 else:
-                    self.__class__.AMMOPACKS_LOC[pack_loc] = min( 20, self.__class__.AMMOPACKS_LOC[pack_loc] + 1 )
+                    self.__class__.AMMOPACKS_LOC[pack_loc] = min( self.settings.ammo_rate, self.__class__.AMMOPACKS_LOC[pack_loc] + 1 )
                 
     def whoIsScout(self, obs, not_poss_cps):
         
-        MAX_SCOUTS = 6 / (len(not_poss_cps)+1)
+        MAX_SCOUTS = self.__class__.TEAM_SIZE / (len(not_poss_cps)+1)
         #print MAX_SCOUTS
         # if no one is scouting and I don't have ammo
         # and I am not too close to my goal (unless I have no goal)
-        if len(self.__class__.SCOUTS) < MAX_SCOUTS and obs.ammo == 0 and ( self.goal is None or point_dist(obs.loc, self.goal) > 30 ):
+        if len(self.__class__.SCOUTS) < MAX_SCOUTS and obs.ammo == 0 and ( self.goal is None or point_dist(obs.loc, self.goal) > self.__class__.SHORT_DISTANCE ):
             self.__class__.SCOUTS.append(self.id)     
             
         # If I am the scout and just found some ammo
@@ -155,24 +166,22 @@ class Agent(object):
         # if I have no goal, 
         if self.goal is None:
             # go to the CP closest to our spawn area that we don't own
-            # TODO: Avoid doing this every round!
-            # TODO: Base sorting on current distance instead of distance from spawn area!
+
             
             if len(not_poss_cps) > 0:
                 closest_cp = reduce(self.min_dist, not_poss_cps)
                 self.goal = closest_cp[0:2]
             # if we control all the CPs and I have ammo, 
             # go spawn camping
-            # TODO: Prevent shooting agents in the spawn area that are not spawned yet.
             elif obs.ammo > 0:
-                self.goal = (656 - self.__class__.SPAWN_LOC[0][0], self.__class__.SPAWN_LOC[0][1])
+                self.goal = (self.__class__.MAP_WIDTH - self.__class__.SPAWN_LOC[0][0], self.__class__.SPAWN_LOC[0][1])
             else: # else pick a random CP 
-                self.goal = self.observation.cps[random.randint(0,2)][0:2]
+                self.goal = self.observation.cps[random.randint(0,self.__class__.NUM_POINTS-1)][0:2]
                 
         # if I pass close to an ammopack,
         # then I should go get it
         if ammopacks:
-            ammopacks_close = filter(lambda x: point_dist(x[0:2], obs.loc) < 30, ammopacks)
+            ammopacks_close = filter(lambda x: point_dist(x[0:2], obs.loc) < self.__class__.SHORT_DISTANCE, ammopacks)
             bestpack = self.getBestAmmopack(ammopacks_close, obs)
             if bestpack is not None:
                 self.goal = bestpack[0:2]
@@ -198,12 +207,13 @@ class Agent(object):
             best_ammo_loc = reduce(self.min_ammo_dist, self.__class__.AMMOPACKS_LOC)
             #print "{0}\t{1}".format(closest_ammo, self.__class__.AMMOPACKS_LOC)
             # go there if you think you have a good chance of finding ammo there
-            if self.__class__.AMMOPACKS_LOC[best_ammo_loc] > 10 or len(self.__class__.UNVISITED) == 0:
+            if self.__class__.AMMOPACKS_LOC[best_ammo_loc] > self.settings.ammo_rate / 2:
                 self.goal = best_ammo_loc
                 #print "There was an ammopack around here somewhere..."
                 
         # if we have not found all the ammo locations, start exploring unvisited nodes
-        if self.goal is None and len(self.__class__.AMMOPACKS_LOC) < 6:                    
+        # TODO: only explore if ammo locations aren't discovered naturally after some time
+        if self.goal is None and len(self.__class__.AMMOPACKS_LOC) < self.__class__.NUM_AMMO_LOCS:                    
             closest_node = reduce(self.min_dist, self.__class__.UNVISITED)
             self.goal = closest_node       
             #print "Let's go exploring!"
@@ -250,12 +260,12 @@ class Agent(object):
                         shoot = True
                         
                         for friend in obs.friends:
-                            if line_intersects_circ(obs.loc, enemy[0:2], friend[0:2], 10):
+                            if line_intersects_circ(obs.loc, enemy[0:2], friend[0:2], self.__class__.VERY_SHORT_DISTANCE):
                                 shoot = False
 
                         # do not shoot at respawning enemy
                         for spawn_loc in self.__class__.SPAWN_LOC:
-                            if point_dist((656 - spawn_loc[0], spawn_loc[1]), enemy) < 16:
+                            if point_dist((self.__class__.MAP_WIDTH - spawn_loc[0], spawn_loc[1]), enemy) < self.settings.tilesize:
                                 shoot = False
                         
                         if shoot == True:
@@ -356,7 +366,7 @@ class Agent(object):
             return loc2[0:2]
         
     def min_ammo_dist_fast(self, ammo_loc1, ammo_loc2):
-        WEIGHT = 750
+        WEIGHT = self.__class__.AMMO_EXPECTATION_WEIGHT
         d1 = (point_dist(self.observation.loc, ammo_loc1) + WEIGHT / self.__class__.AMMOPACKS_LOC[ammo_loc1] )
         d2 = (point_dist(self.observation.loc, ammo_loc2) + WEIGHT / self.__class__.AMMOPACKS_LOC[ammo_loc2] )
         if (d1 < d2):
@@ -367,7 +377,7 @@ class Agent(object):
             return ammo_loc2
         
     def min_ammo_dist(self, ammo_loc1, ammo_loc2):
-        WEIGHT = 750
+        WEIGHT = self.__class__.AMMO_EXPECTATION_WEIGHT
         path1 = find_path(self.observation.loc, ammo_loc1[0:2], self.mesh, self.grid, self.settings.tilesize)
         path2 = find_path(self.observation.loc, ammo_loc2[0:2], self.mesh, self.grid, self.settings.tilesize)
         d1 = (self.path_length(self.observation.loc, path1) + WEIGHT / self.__class__.AMMOPACKS_LOC[ammo_loc1] )
