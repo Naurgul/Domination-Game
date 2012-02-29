@@ -105,7 +105,7 @@ class Agent(object):
         # if I see an ammopack for the first time
         # add both that one and its symmetric to the list of ammopack locations
         for pack in ammopacks:
-            #print "AMMOPACKS_X: ", pack        
+            #print "AMMOPACKS_X: ", pack
             self.__class__.AMMOPACKS_LOC[(pack[0], pack[1])] = self.settings.ammo_rate
             self.__class__.AMMOPACKS_LOC[(self.__class__.MAP_WIDTH - pack[0], pack[1])] = self.settings.ammo_rate
             
@@ -143,6 +143,8 @@ class Agent(object):
                     self.__class__.AMMOPACKS_UPDATED.append(pack_loc)
                 
     def whoIsScout(self, obs, not_poss_cps):
+
+        #TODO: 1. add LOW_AMMO constant, 2. if all CPs ours, some (or one) with lowest ammo go for ammo
         
         MAX_SCOUTS = self.__class__.TEAM_SIZE / (len(not_poss_cps)+1)
         #print MAX_SCOUTS
