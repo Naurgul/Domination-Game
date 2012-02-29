@@ -135,12 +135,11 @@ class Agent(object):
                         self.__class__.AMMOPACKS_LOC[pack_loc] = self.settings.ammo_rate
                     elif self.__class__.AMMOPACKS_LOC[pack_loc] == self.settings.ammo_rate:
                         self.__class__.AMMOPACKS_LOC[pack_loc] = 1
-                    elif pack_loc not in self.__class__.AMMOPACKS_UPDATED:
+                    elif pack_loc in self.__class__.AMMOPACKS_UPDATED:
                         self.__class__.AMMOPACKS_LOC[pack_loc] = min( self.settings.ammo_rate, self.__class__.AMMOPACKS_LOC[pack_loc] + 1 )
-                        self.__class__.AMMOPACKS_UPDATED.append(pack_loc)
-                elif pack_loc not in self.__class__.AMMOPACKS_UPDATED:
+                        self.__class__.AMMOPACKS_UPDATED.append[pack_loc]
+                else:
                     self.__class__.AMMOPACKS_LOC[pack_loc] = min( self.settings.ammo_rate, self.__class__.AMMOPACKS_LOC[pack_loc] + 1 )
-                    self.__class__.AMMOPACKS_UPDATED.append(pack_loc)
                 
     def whoIsScout(self, obs, not_poss_cps):
         
