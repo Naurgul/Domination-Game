@@ -27,6 +27,7 @@ class Agent(object):
     AMMO_EXPECTATION_WEIGHT = 750
     EXPLORE_WAIT_STEPS = 50
     DISTANCE_TURN_IN_PLACE = 10 # also changed in init
+    MAX_AGENTS_PER_CP = 3
     
     # ===============
     
@@ -107,7 +108,7 @@ class Agent(object):
         # decide who is scouting 
         self.whoIsScout(obs, not_poss_cps)   
         
-        # decide behaviour based on role    
+        # decide goal based on role    
         if self.id in self.__class__.SCOUTS:
             self.scoutBehaviour(ammopacks, obs, not_poss_cps)
         else:            
@@ -116,7 +117,7 @@ class Agent(object):
         #print extra information when selected
         self.printInfo(obs, ammopacks)
         
-        # return specific (low-level) actions based on goal
+        # return specific (low-level) actions given the goal
         return self.GoalToAction(obs)
 
     def updateAmmopacks(self, obs, ammopacks):
@@ -130,7 +131,7 @@ class Agent(object):
             
         # ammopacks can be updated at most once per turn
         # empty the ammo location blacklist if it's a new round
-        if self.newRound():
+        if self.id == 0:
             self.__class__.AMMOPACKS_UPDATED = []   
         
         # for ammopacks that should be visible:
@@ -164,7 +165,7 @@ class Agent(object):
 
         #TODO: 1. add LOW_AMMO constant, 2. if all CPs ours, some (or one) with lowest ammo go for ammo
         
-        MAX_SCOUTS = self.__class__.TEAM_SIZE / (len(not_poss_cps)+1)
+        MAX_SCOUTS = self.__class__.TEAM_SIZE - len(not_poss_cps)
         #print MAX_SCOUTS
         # if no one is scouting and I don't have ammo
         # and I am not too close to my goal (unless I have no goal)
@@ -192,11 +193,28 @@ class Agent(object):
             # go to the CP closest to our spawn area that we don't own
 
             if len(not_poss_cps) > 0:
-                closest_cp = reduce(self.min_dist, not_poss_cps)
-                self.goal = closest_cp[0:2]
-            # if we control all the CPs and I have ammo, 
-            # go spawn camping
-            elif obs.ammo > 0:
+                
+                # don't consider CPs that are set as the goal for too many teammates
+                gfreq = {}
+                for g in self.__class__.GOALS:
+                    if g in gfreq:
+                        gfreq[g] += 1
+                    else:
+                        gfreq[g] = 1
+                
+                list_cps = not_poss_cps[:]
+                for cp in not_poss_cps:
+                    if cp[0:2] in gfreq:
+                        if gfreq[cp[0:2]] > self.__class__.MAX_AGENTS_PER_CP:
+                            list_cps.remove(cp)    
+                            
+                if len(list_cps) > 0:                         
+                    closest_cp = reduce(self.min_dist, list_cps)
+                    self.goal = closest_cp[0:2]
+                    
+            # if there is no good CP to go to and I have ammo
+            # go spawn camping            
+            if self.goal is None and obs.ammo > 0:
                 self.goal = (self.__class__.MAP_WIDTH - self.__class__.SPAWN_LOC[0][0], self.__class__.SPAWN_LOC[0][1])
             else: # else pick a random CP 
                 self.goal = self.observation.cps[random.randint(0,self.__class__.NUM_POINTS-1)][0:2]
@@ -464,17 +482,6 @@ class Agent(object):
         return min_loc
             
             
-    def newRound(self):
-        
-        # TODO: this function is unsafe. Replace with self.id == 0        
-        
-        if self.observation.step > self.__class__.LAST_ROUND:
-            self.__class__.LAST_ROUND = self.observation.step
-            return True
-        else:
-            self.__class__.LAST_ROUND = self.observation.step
-            return False
-        
 
     
     
