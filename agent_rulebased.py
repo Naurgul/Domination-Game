@@ -76,6 +76,14 @@ class Agent(object):
         
     def action(self):
         
+        # TODO LIST:
+        #1. Do not overcrowd the same goals.
+        #2. If you meet not owned CPs or APs on your way to a goal then go for them.
+        #3. If you see an enemy close to a CP go and recapture it defend?).
+        #4. Do not get stuck on same team members.
+        #5. Do not hit your head to the walls.
+        #6. Do not run around like idiots when spawncamping.
+        
         # shorthand for observations
         obs = self.observation
           
@@ -108,11 +116,15 @@ class Agent(object):
         # decide who is scouting 
         self.whoIsScout(obs, not_poss_cps)   
         
-        # decide goal based on role    
-        if self.id in self.__class__.SCOUTS:
-            self.scoutBehaviour(ammopacks, obs, not_poss_cps)
-        else:            
-            self.trooperBehaviour(obs, ammopacks, not_poss_cps)       
+        # see if there is an obvious easy goal close-by
+        self.greedyGoal(ammopacks, obs, not_poss_cps)        
+            
+        # decide goal based on role
+        if self.goal is None:    
+            if self.id in self.__class__.SCOUTS:
+                self.scoutBehaviour(ammopacks, obs, not_poss_cps)
+            else:            
+                self.trooperBehaviour(obs, ammopacks, not_poss_cps)       
             
         #print extra information when selected
         self.printInfo(obs, ammopacks)
@@ -178,6 +190,30 @@ class Agent(object):
         if self.id in self.__class__.SCOUTS and obs.ammo > 0:
             self.__class__.SCOUTS.remove(self.id)
             self.goal = None
+            
+    def greedyGoal(self, ammopacks, obs, not_poss_cps):
+        
+        # if there is an ammopack close by
+        # with no one else to get it
+        # go get it        
+        if ammopacks:
+            bestpack = self.getBestTarget(ammopacks, obs) 
+            if bestpack is not None:
+                self.goal = bestpack[0:2]
+                #print "Ammopack right ahead!"
+           
+        # if there is a cp nearby
+        # with no one else to get it
+        # go get it
+        if self.goal is None:
+            cps_close = filter(lambda x: point_dist(x, obs.loc) < self.settings.max_see, not_poss_cps)
+            bestcps = self.getBestTarget(cps_close, obs) 
+            if bestcps is not None:
+                self.goal = bestcps[0:2]
+            
+                
+            
+        
         
     def trooperBehaviour(self, obs, ammopacks, not_poss_cps):
         
@@ -202,31 +238,18 @@ class Agent(object):
             else: # else pick a random CP 
                 self.goal = self.observation.cps[random.randint(0,self.__class__.NUM_POINTS-1)][0:2]
                 
-        # if I pass close to an ammopack,
-        # then I should go get it
-        if ammopacks:
-            ammopacks_close = filter(lambda x: point_dist(x[0:2], obs.loc) < self.__class__.SHORT_DISTANCE, ammopacks)
-            bestpack = self.getBestAmmopack(ammopacks_close, obs)
-            if bestpack is not None:
-                self.goal = bestpack[0:2]
-        
+       
         # TODO: take into account the number of enemies near the CP?
                 
     
     def scoutBehaviour(self, ammopacks, obs, not_poss_cps):  
                 
-        #print "MY LOCATION: ", obs.loc
-        
-        # if there is an ammopack close by
-        # go get it
-        
-        if ammopacks:
-            bestpack = self.getBestAmmopack(ammopacks, obs) 
-            if bestpack is not None:
-                self.goal = bestpack[0:2]
-            #print "Ammopack right ahead!"
+        # TODO: Take into account if enemy is closer!
+        # maybe the above TOOD can be achieved by 
+        # disregarding ammo locs that are close-by
+        # and letting them be handled solely by greedyGoal()        
                         
-        # else, check my list of ammopack locations and go towards the best one
+        # check my list of ammopack locations and go towards the best one
         if self.goal is None and len(self.__class__.AMMOPACKS_LOC) > 0:
             best_ammo_loc = reduce(self.min_ammo_dist, self.__class__.AMMOPACKS_LOC)
             #print "{0}\t{1}".format(closest_ammo, self.__class__.AMMOPACKS_LOC)
@@ -442,14 +465,14 @@ class Agent(object):
             #print "{0}<{1}".format(d2, d1)
             return ammo_loc2
 
-    def getBestAmmopack(self, ammopacks, obs):
-        #TODO: check path length or ray trace to make sure we're not going around walls
+    def getBestTarget(self, targets, obs):
         everyone = obs.friends + obs.foes
         everyone.append(obs.loc)
         #print everyone
-        good_ammopacks = filter(lambda pack: self.whoIsTheClosest(everyone, pack) == obs.loc, ammopacks)
-        if len(good_ammopacks) > 0:
-            return reduce(self.min_dist, good_ammopacks)
+        unobstracted_targets = filter(lambda t: not line_intersects_grid(obs.loc, t[0:2], self.grid, self.settings.tilesize), targets)
+        good_targets = filter(lambda t: self.whoIsTheClosest(everyone, t) == obs.loc, unobstracted_targets)
+        if len(good_targets) > 0:
+            return reduce(self.min_dist, good_targets)
         else:
             return None   
 
