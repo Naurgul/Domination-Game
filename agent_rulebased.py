@@ -27,7 +27,7 @@ class Agent(object):
     AMMO_EXPECTATION_WEIGHT = 750
     EXPLORE_WAIT_STEPS = 50
     DISTANCE_TURN_IN_PLACE = 10 # also changed in init
-    MAX_AGENTS_PER_CP = 3
+    #MAX_AGENTS_PER_CP = 3
     
     # ===============
     
@@ -165,10 +165,11 @@ class Agent(object):
 
         #TODO: 1. add LOW_AMMO constant, 2. if all CPs ours, some (or one) with lowest ammo go for ammo
         
-        MAX_SCOUTS = self.__class__.TEAM_SIZE - len(not_poss_cps)
+        MAX_SCOUTS = self.__class__.TEAM_SIZE / (len(not_poss_cps)+1)
         #print MAX_SCOUTS
         # if no one is scouting and I don't have ammo
         # and I am not too close to my goal (unless I have no goal)
+        # TODO: Sort by distance to goal and pick the one who is the farthest!
         if len(self.__class__.SCOUTS) < MAX_SCOUTS and obs.ammo == 0 and ( self.goal is None or point_dist(obs.loc, self.goal) > self.__class__.SHORT_DISTANCE ):
             self.__class__.SCOUTS.append(self.id)     
             
@@ -191,30 +192,12 @@ class Agent(object):
         # if I have no goal, 
         if self.goal is None:
             # go to the CP closest to our spawn area that we don't own
-
             if len(not_poss_cps) > 0:
-                
-                # don't consider CPs that are set as the goal for too many teammates
-                gfreq = {}
-                for g in self.__class__.GOALS:
-                    if g in gfreq:
-                        gfreq[g] += 1
-                    else:
-                        gfreq[g] = 1
-                
-                list_cps = not_poss_cps[:]
-                for cp in not_poss_cps:
-                    if cp[0:2] in gfreq:
-                        if gfreq[cp[0:2]] > self.__class__.MAX_AGENTS_PER_CP:
-                            list_cps.remove(cp)    
-                            
-                if len(list_cps) > 0:                         
-                    closest_cp = reduce(self.min_dist, list_cps)
-                    self.goal = closest_cp[0:2]
-                    
-            # if there is no good CP to go to and I have ammo
-            # go spawn camping            
-            if self.goal is None and obs.ammo > 0:
+                closest_cp = reduce(self.min_dist, not_poss_cps)
+                self.goal = closest_cp[0:2]
+            # if we control all the CPs and I have ammo, 
+            # go spawn camping
+            elif obs.ammo > 0:
                 self.goal = (self.__class__.MAP_WIDTH - self.__class__.SPAWN_LOC[0][0], self.__class__.SPAWN_LOC[0][1])
             else: # else pick a random CP 
                 self.goal = self.observation.cps[random.randint(0,self.__class__.NUM_POINTS-1)][0:2]
