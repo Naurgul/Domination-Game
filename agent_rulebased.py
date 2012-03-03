@@ -98,8 +98,7 @@ class Agent(object):
         
         # return specific (low-level) actions based on goal
         return self.GoalToAction(obs)
-        
-    
+
     def updateAmmopacks(self, obs, ammopacks):
         
         # if I see an ammopack for the first time
@@ -256,11 +255,6 @@ class Agent(object):
                     
             # If I am not in the enemy's spawn area and I see some enemies in my proximity and I can shoot them without harming my friends, I do it !
             
-            # TODO: Find a way to get the best foe to shoot at (I propose a list with the enemies able to shoot at and then sort it;
-            # preferably shoot the furthest one first (do not let him get away!) or compare to how many ammo I have left and decide).
-            # At the moment if we find one foe and set shoot to true and then another cannot be shot at,
-            # then shoot turns false and no one gets shot.
-
             possible_targets_list = []
 
             if obs.foes:
@@ -310,18 +304,7 @@ class Agent(object):
             speed = 0
         
         return (turn, speed, shoot)
-    
-    def getBestAmmopack(self, ammopacks, obs):
-        #TODO: check path length or ray trace to make sure we're not going around walls
-        everyone = obs.friends + obs.foes
-        everyone.append(obs.loc)
-        #print everyone
-        good_ammopacks = filter(lambda pack: self.whoIsTheClosest(everyone, pack) == obs.loc, ammopacks)
-        if len(good_ammopacks) > 0:
-            return reduce(self.min_dist, good_ammopacks)
-        else:
-            return None   
-    
+
     def printInfo(self, obs, ammopacks):
         if obs.selected:
             #print "Scouting: {0}".format(self.__class__.SCOUT == self.id) 
@@ -425,7 +408,18 @@ class Agent(object):
         else:
             #print "{0}<{1}".format(d2, d1)
             return ammo_loc2
-        
+
+    def getBestAmmopack(self, ammopacks, obs):
+        #TODO: check path length or ray trace to make sure we're not going around walls
+        everyone = obs.friends + obs.foes
+        everyone.append(obs.loc)
+        #print everyone
+        good_ammopacks = filter(lambda pack: self.whoIsTheClosest(everyone, pack) == obs.loc, ammopacks)
+        if len(good_ammopacks) > 0:
+            return reduce(self.min_dist, good_ammopacks)
+        else:
+            return None   
+
     def whoIsTheClosest(self, loc_list, target):
         min_dist = float("inf")
         min_loc = None
