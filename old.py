@@ -105,15 +105,14 @@ class Agent(object):
         # if I see an ammopack for the first time
         # add both that one and its symmetric to the list of ammopack locations
         for pack in ammopacks:
-            #print "AMMOPACKS_X: ", pack        
+            #print "AMMOPACKS_X: ", pack
             self.__class__.AMMOPACKS_LOC[(pack[0], pack[1])] = self.settings.ammo_rate
             self.__class__.AMMOPACKS_LOC[(self.__class__.MAP_WIDTH - pack[0], pack[1])] = self.settings.ammo_rate
             
         # ammopacks can be updated at most once per turn
         # empty the ammo location blacklist if it's a new round
         if self.newRound():
-           self.__class__.AMMOPACKS_UPDATED = []   
-
+            self.__class__.AMMOPACKS_UPDATED = []   
         
         # for ammopacks that should be visible:
         #   t=20 if I see them
@@ -135,13 +134,16 @@ class Agent(object):
                         self.__class__.AMMOPACKS_LOC[pack_loc] = self.settings.ammo_rate
                     elif self.__class__.AMMOPACKS_LOC[pack_loc] == self.settings.ammo_rate:
                         self.__class__.AMMOPACKS_LOC[pack_loc] = 1
-                    elif pack_loc in self.__class__.AMMOPACKS_UPDATED:
+                    elif pack_loc not in self.__class__.AMMOPACKS_UPDATED:
                         self.__class__.AMMOPACKS_LOC[pack_loc] = min( self.settings.ammo_rate, self.__class__.AMMOPACKS_LOC[pack_loc] + 1 )
-                        self.__class__.AMMOPACKS_UPDATED.append[pack_loc]
-                else:
+                        self.__class__.AMMOPACKS_UPDATED.append(pack_loc)
+                elif pack_loc not in self.__class__.AMMOPACKS_UPDATED:
                     self.__class__.AMMOPACKS_LOC[pack_loc] = min( self.settings.ammo_rate, self.__class__.AMMOPACKS_LOC[pack_loc] + 1 )
+                    self.__class__.AMMOPACKS_UPDATED.append(pack_loc)
                 
     def whoIsScout(self, obs, not_poss_cps):
+
+        #TODO: 1. add LOW_AMMO constant, 2. if all CPs ours, some (or one) with lowest ammo go for ammo
         
         MAX_SCOUTS = self.__class__.TEAM_SIZE / (len(not_poss_cps)+1)
         #print MAX_SCOUTS
@@ -234,7 +236,7 @@ class Agent(object):
         
         # if I see an enemy within range and I have ammo 
         # there's no wall (TODO: or friendly) between us,
-        # shoot the motherfucker!  
+        # shoot the motherfucker!  BAD LANGUAGE!!
         shoot = False
         
         #if (obs.ammo > 0 and obs.foes and 
@@ -254,10 +256,14 @@ class Agent(object):
                     
             # If I am not in the enemy's spawn area and I see some enemies in my proximity and I can shoot them without harming my friends, I do it !
             
+            # TODO: Find a way to get the best foe to shoot at (I propose a list with the enemies able to shoot at and then sort it;
+            # preferably shoot the furthest one first (do not let him get away!) or compare to how many ammo I have left and decide).
+            # At the moment if we find one foe and set shoot to true and then another cannot be shot at,
+            # then shoot turns false  and no one gets shot.
             if obs.foes:
                 for enemy in obs.foes:
                     # I can shoot this enemy - he is in my shooting range and there is no wall blocking me
-                    if point_dist(enemy[0:2], obs.loc) < self.settings.max_range and not    line_intersects_grid(obs.loc, enemy[0:2], self.grid, self.settings.tilesize):
+                    if point_dist(enemy[0:2], obs.loc) < self.settings.max_range and not line_intersects_grid(obs.loc, enemy[0:2], self.grid, self.settings.tilesize):
                     # But I do not shoot if a friend is between me and the enemy
                         shoot = True
                         
@@ -272,17 +278,18 @@ class Agent(object):
                         
                         if shoot == True:
                             self.goal = enemy[0:2]
+                            break # with this the first found in list that is able to be shot at, gets shot
             
-        # use the mesh to find a path to my goal    
+        # use the mesh to find a path to my goal
         path = find_path(obs.loc, self.goal, self.mesh, self.grid, self.settings.tilesize)
         
         # use the path to decide the low level actions I need to take right now
         if path:
             dx = path[0][0] - obs.loc[0]
             dy = path[0][1] - obs.loc[1]
-            turn = angle_fix(math.atan2(dy, dx) - obs.angle)            
+            turn = angle_fix(math.atan2(dy, dx) - obs.angle)
             if turn > self.settings.max_turn or turn < -self.settings.max_turn:
-                shoot = False                
+                shoot = False
             speed = (dx**2 + dy**2)**0.5
             #if point_dist(obs.loc, path[0]) < self.__class__.DISTANCE_TURN_IN_PLACE and math.fabs(turn) >= self.settings.max_turn:
             #    speed = 0
