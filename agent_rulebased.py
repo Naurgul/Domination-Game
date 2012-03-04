@@ -251,7 +251,9 @@ class Agent(object):
                         
         # check my list of ammopack locations and go towards the best one
         if self.goal is None and len(self.__class__.AMMOPACKS_LOC) > 0:
-            best_ammo_loc = reduce(self.min_ammo_dist, self.__class__.AMMOPACKS_LOC)
+            #only check unseen ammo locations, the rest are handled by the greedy goal tihng
+            unseen_ammo_locs = filter(lambda loc: point_dist(loc, obs.loc) > self.__class__.SHORT_DISTANCE, self.__class__.AMMOPACKS_LOC)
+            best_ammo_loc = reduce(self.min_ammo_dist, unseen_ammo_locs)
             #print "{0}\t{1}".format(closest_ammo, self.__class__.AMMOPACKS_LOC)
             # go there if you think you have a good chance of finding ammo there
             if self.__class__.AMMOPACKS_LOC[best_ammo_loc] > self.settings.ammo_rate / 2:
@@ -269,7 +271,6 @@ class Agent(object):
             self.__class__.SCOUTS.remove(self.id)
             self.trooperBehaviour(obs, ammopacks, not_poss_cps)
             
-        # TODO: If I pass close to a CP we don't control and no one else is around, I should capture it
             
     def GoalToAction(self, obs):
         
