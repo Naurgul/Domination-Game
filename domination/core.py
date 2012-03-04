@@ -6,7 +6,7 @@ Refer to the readme for usage instructions.
 
 """
 __author__ = "Thomas van den Berg and Tim Doolan"
-MAJOR,MINOR,PATCH = 1,3,0
+MAJOR,MINOR,PATCH = 1,3,1
 __version__ = '%d.%d.%d'%(MAJOR,MINOR,PATCH)
 
 ### IMPORTS ###
@@ -125,12 +125,14 @@ class Settings(object):
                 
 class GameStats(object):
     def __init__(self):
-        self.score_red  = 0  #:The number of points scored by red
-        self.score_blue = 0 #: The number of points scored by blue
-        self.score      = 0.0 #: The final score as a float (red/total)
-        self.steps      = 0 #: Number of steps the game lasted
-        self.ammo_red   = 0 #: Number of ammo packs that red picked up
-        self.ammo_blue  = 0 #: Idem for blue
+        self.score_red       = 0  #:The number of points scored by red
+        self.score_blue      = 0 #: The number of points scored by blue
+        self.score           = 0.0 #: The final score as a float (red/total)
+        self.steps           = 0 #: Number of steps the game lasted
+        self.ammo_red        = 0 #: Number of ammo packs that red picked up
+        self.ammo_blue       = 0 #: Idem for blue
+        self.deaths_red      = 0 #: Number red agents that got shot
+        self.deaths_blue     = 0 #: Number blue agents that got shot
         self.think_time_red  = 0.0 #: Total time in seconds that red took to compute actions
         self.think_time_blue = 0.0 #: Idem for blue
     
@@ -154,6 +156,13 @@ class GameLog(object):
             except:
                 pass
         self.log.append(string)
+    
+    def truncated(self, kbs=16):
+        s = str(self)
+        if len(s) > kbs*1024:
+            msg = "\n== LOG TRUNCATED TO %dKB ==\n"%(kbs,)
+            s = s[:kbs*1024-len(msg)] + msg
+        return s
         
     def __str__(self):
         return ''.join(self.log)
@@ -162,7 +171,7 @@ class Team(object):
     """ Holds info about a team.
     """
     FIND_NAME   = r'^[ \t]*NAME[ \t]*=[ \t]*[\'\"]([a-zA-Z0-9\-\_ ]+)[\'\"]'
-    NAME_UNSAFE = r'[^a-z0-9\_]+'
+    NAME_UNSAFE = r'[^a-zA-Z0-9\_]+'
     
     def __init__(self, brain=None, init_kwargs={}, name=None):
         """ Initialize a Team object.
@@ -191,7 +200,7 @@ class Team(object):
         match = re.search(self.FIND_NAME, self.brain_string, re.M)
         if match:
             found = match.groups(1)[0]
-            self.name_internal = re.sub(self.NAME_UNSAFE, '_', found.lower())
+            self.name_internal = re.sub(self.NAME_UNSAFE, '_', found)
             self.name_internal = self.name_internal.strip('_')
         else:
             self.name_internal = 'unnamed'
@@ -439,6 +448,7 @@ class Game(object):
                     t.get_action()
                 # Compute shooting
                 for tank in self.tanks:
+                    tank.hit = None
                     if tank.shoots:
                         tcx, tcy = tank._x + tank.width/2, tank._y + tank.height/2
                         target = (cos(tank.angle) * settings.max_range + tcx, 
@@ -449,6 +459,7 @@ class Game(object):
                             t, (px,py), who = hits[0]
                             tank._hitx, tank._hity = px, py
                             if isinstance(who, Tank):
+                                tank.hit = who.team
                                 who.respawn_in = self.settings.spawn_time
                 
                 # Record times
@@ -492,6 +503,10 @@ class Game(object):
                 # Reset tanks that got shot
                 for tank in self.tanks:
                     if tank.respawn_in == self.settings.spawn_time:
+                        if tank.team == TEAM_RED:
+                            self.stats.deaths_red += 1
+                        else:
+                            self.stats.deaths_blue += 1
                         tank.ammo = 0
                         tank.x = tank._x = tank.spawn.x + 2
                         tank.y = tank._y = tank.spawn.y + 2
@@ -1290,6 +1305,7 @@ class Tank(GameObject):
         self.ammo        = 0
         self.selected    = False
         self.shoots      = False
+        self.hit         = None     #: What the tank hit. Can be None/TEAM_RED/TEAM_BLUE
         self.respawn_in  = -1
         self.spawn       = spawn
         # A list of actions, either for recording or playing back.
@@ -1334,6 +1350,7 @@ class Tank(GameObject):
         obs.foes       = []
         obs.objects    = []
         obs.respawn_in = self.respawn_in
+        obs.hit        = self.hit
         obs.score      = (self.game.score_red, self.game.score_blue)
         obs.selected   = self.selected
         obs.clicked    = self.game.clicked
@@ -1604,6 +1621,7 @@ class Observation(object):
         self.score      = (0,0) #: Current game score
         self.collided   = False #: Whether the agent has collided in the previous turn
         self.respawn_in = -1    #: How many timesteps left before this agent can move again.
+        self.hit        = None  #: What the agent hit with its last shot. Can be None/TEAM_RED/TEAM_BLUE
         # The following properties are only set when
         # the renderer is enabled:
         self.selected = False   #: Indicates if the agent is selected in the UI
@@ -1633,4 +1651,3 @@ class ReplayData(object):
 
 if __name__ == "__main__":
     g = Game(verbose=True, rendered=True).run()
-
