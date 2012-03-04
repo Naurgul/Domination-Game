@@ -26,7 +26,6 @@ class Agent(object):
     NUM_AMMO_LOCS = 6
     AMMO_EXPECTATION_WEIGHT = 750
     EXPLORE_WAIT_STEPS = 50
-    DISTANCE_TURN_IN_PLACE = 10 # also changed in init
     #MAX_AGENTS_PER_CP = 3
     
     # ===============
@@ -47,7 +46,6 @@ class Agent(object):
             self.all_agents = self.__class__.all_agents = []
         self.all_agents.append(self)
 
-        DISTANCE_TURN_IN_PLACE = self.settings.max_speed / 4
     
     def observe(self, observation):
         self.observation = observation
@@ -78,17 +76,15 @@ class Agent(object):
         
         # TODO LIST:
         #1. Do not overcrowd the same goals.
-        #2. If you meet not owned CPs or APs on your way to a goal then go for them.
-        #3. If you see an enemy close to a CP go and recapture it defend?).
-        #4. Do not get stuck on same team members.
+        #2. If you see an enemy close to a CP go and recapture it defend?).
+        #3. Do not get stuck on same team members.
+        #4. Do not run around like idiots when spawncamping.
         #5. Do not hit your head to the walls.
-        #6. Do not run around like idiots when spawncamping.
+        
         
         # shorthand for observations
         obs = self.observation
           
-        # TODO: fill in roles for dead tanks
-        # TODO: replace all distances with path lengths (or do ray traces at least)
         
         #save spawn area
         #this code only runs once, in the beginning of each match!             
@@ -210,9 +206,6 @@ class Agent(object):
             bestcps = self.getBestTarget(cps_close, obs) 
             if bestcps is not None:
                 self.goal = bestcps[0:2]
-            
-                
-            
         
         
     def trooperBehaviour(self, obs, ammopacks, not_poss_cps):
@@ -239,15 +232,11 @@ class Agent(object):
                 self.goal = self.observation.cps[random.randint(0,self.__class__.NUM_POINTS-1)][0:2]
                 
        
-        # TODO: take into account the number of enemies near the CP?
                 
     
     def scoutBehaviour(self, ammopacks, obs, not_poss_cps):  
                 
-        # TODO: Take into account if enemy is closer!
-        # maybe the above TOOD can be achieved by 
-        # disregarding ammo locs that are close-by
-        # and letting them be handled solely by greedyGoal()        
+    
                         
         # check my list of ammopack locations and go towards the best one
         if self.goal is None and len(self.__class__.AMMOPACKS_LOC) > 0:
@@ -274,12 +263,11 @@ class Agent(object):
             
     def GoalToAction(self, obs):
         
-        # TODO: Fix agents running with top speed when they should be rotating in place.
         # TODO: Jiggle around if you're not going anywhere
         
         # if I see an enemy within range and I have ammo 
-        # there's no wall (TODO: or friendly) between us,
-        # shoot the motherfucker!  BAD LANGUAGE!!
+        # there's no wall or friendly between us,
+        # shoot the motherfucker!  
         shoot = False
         
         #if (obs.ammo > 0 and obs.foes and 
@@ -340,9 +328,18 @@ class Agent(object):
             turn = angle_fix(math.atan2(dy, dx) - obs.angle)
             if turn > self.settings.max_turn or turn < -self.settings.max_turn:
                 shoot = False
+            
+            # TODO: Fix agents running with top speed when they should be rotating in place.
+            # if moving would get us away from our goal, turn in place 
+            # actually, don't do it! it's dangerous
+            # TODO: Unless you have an enemy on your tail!
+            #if turn < math.pi / 2:
+            #    speed = (dx**2 + dy**2)**0.5
+            #else:
+            #    speed = 0                
+            
             speed = (dx**2 + dy**2)**0.5
-            #if point_dist(obs.loc, path[0]) < self.__class__.DISTANCE_TURN_IN_PLACE and math.fabs(turn) >= self.settings.max_turn:
-            #    speed = 0
+
             
         else:
             turn = 0
