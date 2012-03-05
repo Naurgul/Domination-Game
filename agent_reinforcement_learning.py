@@ -279,7 +279,7 @@ class Agent(object):
                 else:
                     self.__class__.AMMOPACKS_LOC[pack_loc] = min( 20, self.__class__.AMMOPACKS_LOC[pack_loc] + 1 )
     
-    def getBestAmmopack(self, ammopacks, obs):
+    def getBestTarget(self, ammopacks, obs):
         #TODO: check path length or ray trace to make sure we're not going around walls
         everyone = obs.friends + obs.foes
         everyone.append(obs.loc)
