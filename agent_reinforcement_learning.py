@@ -8,10 +8,10 @@ class Agent(object):
     AMMOPACKS_UPDATED = []
     LAST_ROUND = -1
     
-    pickle_file = open('qvalues.pickle', 'rb')
-    QVALUES = pickle.load(pickle_file)
-    pickle_file.close()
-    #QVALUES = {}
+    #pickle_file = open('qvalues.pickle', 'rb')
+    #QVALUES = pickle.load(pickle_file)
+    #pickle_file.close()
+    QVALUES = None
     
     LEARNING_RATE = 0.7
     DISCOUNT_FACTOR = 0.6
@@ -44,6 +44,11 @@ class Agent(object):
         
     def action(self):
         obs = self.observation
+
+        # get the latest qvalue dictionary
+        pickle_file = open('qvalues.pickle', 'rb')
+        self.__class__.QVALUES = pickle.load(pickle_file)
+        pickle_file.close()
         
         #this code only runs once, in the beginning of each match!
         if len(self.__class__.SPAWN_LOC) < 6:
@@ -65,13 +70,21 @@ class Agent(object):
         
         ##################### REINFORCEMENT LEARNING #####################
         locations_and_state = self.getState(obs, not_poss_cps)
-        self.s_new = locations_and_state[4]
+        self.s_new = locations_and_state[3]
         r = self.getReward()
         if (self.s_old and self.a_old):
                 self.updateQ(self.s_old, self.a_old, self.s_new, r)
 
         action = self.decideAction(self.s_new)
-        self.goal = locations_and_state[action][0]
+        if (action==3):
+            if self.__class__.UNVISITED:
+                unv_close = self.get_closest(self.__class__.UNVISITED)
+                path_unv = find_path(obs.loc, unv_close, self.mesh, self.grid, self.settings.tilesize)
+                self.goal = path_unv[0]
+            else:
+                self.goal = None
+        else:
+            self.goal = locations_and_state[action][0]
         
         self.s_old = self.s_new
         self.a_old = action
@@ -79,7 +92,12 @@ class Agent(object):
         
         #print extra information when selected
         self.printInfo(obs, ammopacks)
-        
+
+        # save the latest qvalue dictionary
+        output = open('qvalues.pickle', 'wb')
+        pickle.dump(self.__class__.QVALUES, output)
+        output.close()  
+
         # return specific (low-level) actions based on goal
         return self.GoalToAction(obs)
                
@@ -152,33 +170,34 @@ class Agent(object):
     # ===== Q-learning functions ===============================================================================
     
     def getState(self, obs, not_poss_cps):
-        # TODO some error here: ValueError Too many values to unpack
-        cp_close = reduce(self.min_dist, not_poss_cps)
-        path_cp = find_path(obs.loc, cp_close,self.mesh, self.grid, self.settings.tilesize)
-        d_cp = self.path_length(obs.loc, path_cp)
-        d_cp = min(round(math.log(d_cp/self.settings.tilesize+1,2)),5)
+        if not_poss_cps:
+            cp_close = reduce(self.min_dist, not_poss_cps)
+            path_cp = find_path(obs.loc, cp_close[0:2],self.mesh, self.grid, self.settings.tilesize)
+            d_cp = self.path_length(obs.loc, path_cp)
+            d_cp = min(int(round(math.log(d_cp/self.settings.tilesize+1,2))),5)
+        else:
+            cp_close = reduce(self.min_dist, obs.cps)
+            path_cp = find_path(obs.loc, cp_close[0:2],self.mesh, self.grid, self.settings.tilesize)
+            d_cp = self.path_length(obs.loc, path_cp)
+            d_cp = min(int(round(math.log(d_cp/self.settings.tilesize+1,2))),5)        
         
         # TODO use function get best ammopack instead
         if(self.__class__.AMMOPACKS_LOC):
             ammo_close = reduce(self.min_ammo_dist, self.__class__.AMMOPACKS_LOC)        
             path_ap = find_path(obs.loc, ammo_close, self.mesh, self.grid, self.settings.tilesize)
             d_ap = self.path_length(obs.loc, path_ap)
-            d_ap = min(round(math.log(d_ap/self.settings.tilesize+1,2)),5)
+            d_ap = min(int(round(math.log(d_ap/self.settings.tilesize+1,2))),5)
         else:
-            path_ap = None
-            d_ap=5
+            path_ap = path_cp
+            d_ap = d_cp
 
         sp_enemy = ((656 - self.__class__.SPAWN_LOC[0][0]), self.__class__.SPAWN_LOC[0][1])
         path_sp = find_path(obs.loc, sp_enemy, self.mesh, self.grid, self.settings.tilesize)
         d_sp = self.path_length(obs.loc, path_sp)
-        d_sp = min(round(math.log(d_sp/self.settings.tilesize+1,2)),5)
-
-        # TODO select a close unvisited location
-        unv_close = self.__class__.UNVISITED[0]
-        path_unv = find_path(obs.loc, unv_close, self.mesh, self.grid, self.settings.tilesize)
+        d_sp = min(int(round(math.log(d_sp/self.settings.tilesize+1,2))),5)
         
-        state=(d_cp, d_ap, d_sp, 3-len(not_poss_cps), obs.ammo, len(self.__class__.AMMOPACKS_LOC))
-        return (path_cp,path_ap,path_sp,path_unv,state)
+        state = (d_cp, d_ap, d_sp, 3-len(not_poss_cps), obs.ammo, len(self.__class__.AMMOPACKS_LOC))
+        return (path_cp,path_ap,path_sp,state)
     
     def getReward(self):
         # TODO figure out of reward #cp is better
@@ -203,8 +222,7 @@ class Agent(object):
         if ((s_new,3) in self.__class__.QVALUES):
             q_max.append(self.__class__.QVALUES[(s_new,3)])
         q_max=max(q_max)
-        self.__class__.QVALUES[q_index]=q_old+self.__class__.LEARNING_RATE*(r+self.__class__.DISCOUNT_FACTOR*q_max - q_old)    
-        
+        self.__class__.QVALUES[q_index]=q_old+self.__class__.LEARNING_RATE*(r+self.__class__.DISCOUNT_FACTOR*q_max - q_old)
     
     def decideAction(self, s_new):
     	# Explore/Exploit ratio
@@ -283,8 +301,20 @@ class Agent(object):
         for node in path:
             length += point_dist(prev, node)
             prev = node
-        #print "{2} {0} - {1}".format(path, length, self.observation.loc)
         return length
+
+    def get_closest(self, points):
+        closest_point=points[0]
+        path=find_path(self.observation.loc, closest_point, self.mesh, self.grid, self.settings.tilesize)
+        closest_dist=self.path_length(self.observation.loc,path)
+        for point in points:
+            path=find_path(self.observation.loc, point, self.mesh, self.grid, self.settings.tilesize)
+            dist=self.path_length(self.observation.loc,path)
+            if (dist < closest_dist):
+                closest_point=point
+                closest_dist=dist
+ 
+        return closest_point
     
     def min_dist(self, loc1, loc2):
         path1 = find_path(self.observation.loc, loc1[0:2], self.mesh, self.grid, self.settings.tilesize)
@@ -301,10 +331,8 @@ class Agent(object):
         d1 = (self.path_length(self.observation.loc, path1) + WEIGHT / self.__class__.AMMOPACKS_LOC[ammo_loc1] )
         d2 = (self.path_length(self.observation.loc, path2) + WEIGHT / self.__class__.AMMOPACKS_LOC[ammo_loc2] )
         if (d1 < d2):
-            #print "{0}<{1}".format(d1, d2)
             return ammo_loc1
         else:
-            #print "{0}<{1}".format(d2, d1)
             return ammo_loc2
         
     def whoIsTheClosest(self, loc_list, target):
