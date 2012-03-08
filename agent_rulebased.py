@@ -4,16 +4,18 @@ class Agent(object):
     SCOUTS = []
     TEAMMATES = []
     ENEMIES = []
-    UNVISITED = None
+    #UNVISITED = None
     
     SPAWN_LOC = []
     AMMOPACKS_LOC = {}
     AMMOPACKS_UPDATED = []
     LAST_ROUND = -1
     
+    #PREVIOUS_AGENT_LOCATIONS = []
+    MAX_RECORDED_LOCATIONS = 5
+    #RECORDED_LOCATIONS = 0
     GOALS = []
-    
-    #CPS_LOC = []
+    ROLES = []
     
     # ===== Constants =====
     
@@ -40,7 +42,10 @@ class Agent(object):
         self.goal = None
         self.scout_goal = None
         
-        self.__class__.UNVISITED = self.mesh.keys()
+        self.PREVIOUS_AGENT_LOCATIONS = []
+        self.RECORDED_LOCATIONS = 0
+        
+        #self.__class__.UNVISITED = self.mesh.keys()
         
         if id == self.__class__.FIRST_AGENT_ID:
             self.all_agents = self.__class__.all_agents = []
@@ -51,9 +56,23 @@ class Agent(object):
         self.observation = observation
         self.selected = observation.selected
         
+        # For each agent, record its previous MAX_RECORDED_LOCATIONS (x, y) positions        
+        
+        if self.RECORDED_LOCATIONS == self.__class__.MAX_RECORDED_LOCATIONS:
+            self.RECORDED_LOCATIONS = 0
+            
+        if len(self.PREVIOUS_AGENT_LOCATIONS) < self.__class__.MAX_RECORDED_LOCATIONS:
+            self.PREVIOUS_AGENT_LOCATIONS.append(observation.loc)
+        else:
+            self.PREVIOUS_AGENT_LOCATIONS[self.RECORDED_LOCATIONS] = observation.loc
+        
+        #print "Recorded locations {0}: {1}".format(self.id, self.RECORDED_LOCATIONS)
+        print "Agent {0}, {1}: {2}".format(self.id, self.RECORDED_LOCATIONS, self.PREVIOUS_AGENT_LOCATIONS)
+        self.RECORDED_LOCATIONS = self.RECORDED_LOCATIONS + 1
+        
         # Reinitialize the ENEMIES list each round
         
-        if self.id == 0:
+        if self.id == self.__class__.FIRST_AGENT_ID:
             self.__class__.ENEMIES = []
             
         # Add the positions of the teammates to the TEAMMATES list
@@ -69,22 +88,23 @@ class Agent(object):
             for enemy in observation.foes:
                 if not enemy in self.__class__.ENEMIES:
                     self.__class__.ENEMIES.append(enemy)
-                    
-        #print "Agent ID: ", self.id
         
     def action(self):
         
         # TODO LIST:
+        
         #1. Do not overcrowd the same goals.
         #2. Do not get stuck on same team members.
         #3. Do not run around like idiots when spawncamping.
         #4. Do not hit your head to the walls.
         
-        
         # shorthand for observations
         obs = self.observation
-          
         
+        # remove goal if reached
+        if self.goal is not None and point_dist(self.goal, obs.loc) < self.settings.tilesize:
+            self.goal = None
+                  
         #save spawn area
         #this code only runs once, in the beginning of each match!             
         
@@ -94,20 +114,18 @@ class Agent(object):
         # find the CPs we have and have not captured yet
         poss_cps = filter(lambda x: x[2] == self.team, self.observation.cps)
         not_poss_cps = filter(lambda x: x[2] != self.team, self.observation.cps)
+        
         # find ammopacks within visual range
         ammopacks = filter(lambda x: x[2] == "Ammo", obs.objects)
+        
         # compare visible ammopacks with the ones in memory
         self.updateAmmopacks(obs, ammopacks)
-        
-        # remove goal if reached    
-        if self.goal is not None and point_dist(self.goal, obs.loc) < self.settings.tilesize:
-            self.goal = None
              
         # if we reach an unexplored node from the mesh graph, 
         # remove it from the list of unvisited nodes           
-        for node in self.__class__.UNVISITED:
-            if point_dist(obs.loc, node) < self.settings.tilesize:
-                self.__class__.UNVISITED.remove(node)
+        #for node in self.__class__.UNVISITED:
+            #if point_dist(obs.loc, node) < self.settings.tilesize:
+                #self.__class__.UNVISITED.remove(node)
         
         # decide who is scouting 
         self.whoIsScout(obs, not_poss_cps)   
@@ -116,11 +134,11 @@ class Agent(object):
         self.greedyGoal(ammopacks, obs, not_poss_cps)        
             
         # decide goal based on role
-        if self.goal is None:    
+        if self.goal is None:
             if self.id in self.__class__.SCOUTS:
                 self.scoutBehaviour(ammopacks, obs, poss_cps, not_poss_cps)
-            else:            
-                self.trooperBehaviour(obs, ammopacks, poss_cps, not_poss_cps)       
+            else:
+                self.trooperBehaviour(obs, ammopacks, poss_cps, not_poss_cps)
             
         #print extra information when selected
         self.printInfo(obs, ammopacks)
@@ -133,7 +151,6 @@ class Agent(object):
         # if I see an ammopack for the first time
         # add both that one and its symmetric to the list of ammopack locations
         for pack in ammopacks:
-            #print "AMMOPACKS_X: ", pack
             self.__class__.AMMOPACKS_LOC[(pack[0], pack[1])] = self.settings.ammo_rate
             self.__class__.AMMOPACKS_LOC[(self.__class__.MAP_WIDTH - pack[0], pack[1])] = self.settings.ammo_rate
             
@@ -215,7 +232,7 @@ class Agent(object):
         
         # remove goal if it is a CP we already control
         if self.goal is not None and self.goal not in map(lambda x: x[0:2], not_poss_cps):
-            self.goal = None            
+            self.goal = None
             
         # If enemy is nearest to CP we own, start going back to defend/recapture
         for cp in poss_cps:
@@ -245,8 +262,6 @@ class Agent(object):
                 
     
     def scoutBehaviour(self, ammopacks, obs, poss_cps, not_poss_cps):  
-                
-    
                         
         # check my list of ammopack locations and go towards the best one
         if self.goal is None and len(self.__class__.AMMOPACKS_LOC) > 0:
@@ -260,9 +275,9 @@ class Agent(object):
                 #print "There was an ammopack around here somewhere..."
                 
         # if we have not found all the ammo locations, start exploring unvisited nodes
-        if self.goal is None and len(self.__class__.AMMOPACKS_LOC) < self.__class__.NUM_AMMO_LOCS and self.observation.step > self.__class__.EXPLORE_WAIT_STEPS:                    
-            closest_node = reduce(self.min_dist, self.__class__.UNVISITED)
-            self.goal = closest_node       
+        #if self.goal is None and len(self.__class__.AMMOPACKS_LOC) < self.__class__.NUM_AMMO_LOCS and self.observation.step > self.__class__.EXPLORE_WAIT_STEPS:                    
+            #closest_node = reduce(self.min_dist, self.__class__.UNVISITED)
+            #self.goal = closest_node
             #print "Let's go exploring!"
 
         #if all else fails, stop being a scout
@@ -280,22 +295,9 @@ class Agent(object):
         # shoot the motherfucker!  
         shoot = False
         
-        #if (obs.ammo > 0 and obs.foes and 
-            #point_dist(obs.foes[0][0:2], obs.loc) < self.settings.max_range
-            #and not line_intersects_grid(obs.loc, obs.foes[0][0:2], self.grid, self.settings.tilesize)):            
-            #self.goal = obs.foes[0][0:2]
-            #shoot = True
-            
-            
         if obs.ammo > 0:
             closeToEnemysSpawn = False
             
-            # I have ammo. I don't shoot at enemy which is respawning
-            
-            #for spawn_loc in self.__class__.SPAWN_LOC:
-                #if point_dist((656 - spawn_loc[0], spawn_loc[1]), obs.loc) < 35:
-                    #closeToEnemysSpawn = True
-                    
             # If I am not in the enemy's spawn area and I see some enemies in my proximity and I can shoot them without harming my friends, I do it !
             
             possible_targets_list = []
@@ -349,12 +351,30 @@ class Agent(object):
             #    speed = 0                
             
             speed = (dx**2 + dy**2)**0.5
-
             
         else:
             turn = 0
             speed = 0
             
+        # If the agent hasn't changed its position for MAX_RECORDED_LOCATIONS
+        # rounds and it is not in the respawn area, there is a high probability
+        # that it got stuck somewhere. In that case, try to escape.
+            
+        if len(self.PREVIOUS_AGENT_LOCATIONS) > 1:
+            agent_changed_location = False
+            first_loc = self.PREVIOUS_AGENT_LOCATIONS[0]
+            
+            for loc in self.PREVIOUS_AGENT_LOCATIONS:
+                if point_dist(loc, first_loc) > self.settings.tilesize:
+                    agent_changed_location = True
+                    break
+            
+            if agent_changed_location == False:
+                turn = random.uniform(0, self.settings.max_turn)
+                speed = random.randint(0, math.floor(self.settings.max_speed / 4))
+                self.PREVIOUS_AGENT_LOCATIONS = []
+                self.RECORED_LOCATIONS = 0
+        
         # Add the current goal to the GOALS list
             
         if len(self.__class__.GOALS) < self.__class__.TEAM_SIZE:
@@ -576,7 +596,7 @@ class Agent(object):
                 min_loc = loc
         
         return min_loc
-            
+
             
 
     
