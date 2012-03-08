@@ -381,7 +381,9 @@ class Agent(object):
             self.__class__.GOALS.append(self.goal)
         else:
             self.__class__.GOALS[self.id] = self.goal
-            
+
+        speed = speed * self.vm_speedbias()
+
         return (turn, speed, shoot)
 
     def printInfo(self, obs, ammopacks):
@@ -428,7 +430,87 @@ class Agent(object):
     
     
     # ===== Auxilliary functions =====
-        
+
+    def vm_speedbias(self):
+        if 1:
+            return self.vm_speedbias_simple()
+        else:
+            return self.vm_speedbias_complicated()
+
+    def vm_speedbias_simple(self):
+        """
+        Determines the angle difference between self and goal.
+        If there are no walls between self and goal then check if the angle is right.
+        Then, calculate the speed variation according angle remaining to turn:
+        The more I need to turn the less I move.
+        """
+        wall_to_goal = line_intersects_grid(self.observation.loc, self.goal, self.grid, self.settings.tilesize)
+        dx = self.observation.loc[0] - self.goal[0]
+        dy = self.observation.loc[1] - self.goal[1]
+        angle_difference = math.pi - (math.fabs(angle_fix(math.atan2(dy, dx) - self.observation.angle)))
+        speedbias = 1
+        if not wall_to_goal and angle_difference > self.settings.max_turn:
+            alpha = angle_difference - self.settings.max_turn
+            if alpha > self.settings.max_turn:
+                alpha = self.settings.max_turn / alpha
+            else:
+                alpha = 1 - alpha / self.settings.max_turn
+            speedbias = alpha
+        return speedbias
+
+    def vm_speedbias_complicated(self):
+        """
+        Determines the angle difference between self and goal.
+        If there are no walls between self and goal then check if the angle is right.
+        If there are walls, check if I need more turns.
+        Then, calculate the speed variation according angle remaining to turn:
+        The more I need to turn the less I move.
+        Unless there is an enemy in range or depending on my distance to the goal.
+        """
+        wall_to_goal = line_intersects_grid(self.observation.loc, self.goal, self.grid, self.settings.tilesize)
+        distance_to_goal = point_dist(self.observation.loc, self.goal)
+        enemy_within_shooting_range = False
+        if self.observation.foes:
+            for enemy in self.observation.foes:
+                if point_dist(enemy[0:2], self.observation.loc) < self.settings.max_range and not line_intersects_grid(self.observation.loc, enemy[0:2], self.grid, self.settings.tilesize):
+                    enemy_within_shooting_range = True
+        dx = self.observation.loc[0] - self.goal[0]
+        dy = self.observation.loc[1] - self.goal[1]
+        angle_difference = math.pi - (math.fabs(angle_fix(math.atan2(dy, dx) - self.observation.angle)))
+        alpha = angle_difference - self.settings.max_turn
+        if angle_difference > self.settings.max_turn:
+            angle_difference = 1
+            if alpha > self.settings.max_turn:
+                alpha = self.settings.max_turn / alpha
+            else:
+                alpha = 1 - alpha / self.settings.max_turn
+        else:
+            alpha = 1
+            angle_difference = 0
+        if wall_to_goal:
+            if alpha > math.pi * 3/2:
+                wall_to_goal = 2
+            else:
+                wall_to_goal = 0
+        else:
+            wall_to_goal = 0
+        if distance_to_goal > self.settings.max_see:
+            distance_to_goal = 4
+        else:
+            distance_to_goal = 0
+        speedbias = 1
+        chmod = angle_difference + wall_to_goal + distance_to_goal
+        # if chmod == 0 or chmod == 2 or chmod == 4 or chmod == 6:
+        if chmod == 1:
+            speedbias = alpha
+        elif chmod == 3 or chmod == 5:
+            speedbias = alpha/4
+        elif chmod == 7:
+            speedbias = alpha/8
+        if enemy_within_shooting_range:
+            speedbias = 1/2
+        return speedbias
+
     def compare_spawn_dist(self, cp_loc):
         path = find_path(self.observation.loc, cp_loc[0:2], self.mesh, self.grid, self.settings.tilesize)
         return self.path_length(self.__class__.SPAWN_LOC, path)

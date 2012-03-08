@@ -20,5 +20,3 @@ for i in range(MATCHES):
     print i+1, teamWon, game.stats.score_red, "-", game.stats.score_blue, "\n\t", red, "-", blu 
 
 print "\nFinal score: ", red, "-", blu
-    
-
