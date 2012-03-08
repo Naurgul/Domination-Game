@@ -76,10 +76,9 @@ class Agent(object):
         
         # TODO LIST:
         #1. Do not overcrowd the same goals.
-        #2. If you see an enemy close to a CP go and recapture it defend?).
-        #3. Do not get stuck on same team members.
-        #4. Do not run around like idiots when spawncamping.
-        #5. Do not hit your head to the walls.
+        #2. Do not get stuck on same team members.
+        #3. Do not run around like idiots when spawncamping.
+        #4. Do not hit your head to the walls.
         
         
         # shorthand for observations
@@ -92,7 +91,8 @@ class Agent(object):
         if len(self.__class__.SPAWN_LOC) < self.__class__.TEAM_SIZE:
             self.__class__.SPAWN_LOC.append(obs.loc)
             
-        # find the CPs we have not captured yet
+        # find the CPs we have and have not captured yet
+        poss_cps = filter(lambda x: x[2] == self.team, self.observation.cps)
         not_poss_cps = filter(lambda x: x[2] != self.team, self.observation.cps)
         # find ammopacks within visual range
         ammopacks = filter(lambda x: x[2] == "Ammo", obs.objects)
@@ -118,9 +118,9 @@ class Agent(object):
         # decide goal based on role
         if self.goal is None:    
             if self.id in self.__class__.SCOUTS:
-                self.scoutBehaviour(ammopacks, obs, not_poss_cps)
+                self.scoutBehaviour(ammopacks, obs, poss_cps, not_poss_cps)
             else:            
-                self.trooperBehaviour(obs, ammopacks, not_poss_cps)       
+                self.trooperBehaviour(obs, ammopacks, poss_cps, not_poss_cps)       
             
         #print extra information when selected
         self.printInfo(obs, ammopacks)
@@ -208,15 +208,25 @@ class Agent(object):
                 self.goal = bestcps[0:2]
         
         
-    def trooperBehaviour(self, obs, ammopacks, not_poss_cps):
+    def trooperBehaviour(self, obs, ammopacks, poss_cps, not_poss_cps):
         
-        # TODO: If enemy is nearest to CP we own, start going back to recapture
         # TODO: Same situation, if we have ammo, set goal to enemy        
         # TODO: Change goal if too many agents have the same goal as you do 
         
         # remove goal if it is a CP we already control
         if self.goal is not None and self.goal not in map(lambda x: x[0:2], not_poss_cps):
             self.goal = None            
+            
+        # If enemy is nearest to CP we own, start going back to defend/recapture
+        for cp in poss_cps:
+            if self.goal is None or point_dist(obs.loc, cp[0:2]) < point_dist(obs.loc, self.goal):
+                allteam = obs.friends[:]
+                allteam.append(obs.loc)
+                if self.whoIsTheClosest(allteam, cp[0:2]) == obs.loc:
+                    for foe in obs.foes:
+                        if point_dist(foe, cp[0:2]) < point_dist(obs.loc, cp[0:2]):
+                            self.goal = cp[0:2]
+                
         
         # if I have no goal, 
         if self.goal is None:
@@ -234,7 +244,7 @@ class Agent(object):
        
                 
     
-    def scoutBehaviour(self, ammopacks, obs, not_poss_cps):  
+    def scoutBehaviour(self, ammopacks, obs, poss_cps, not_poss_cps):  
                 
     
                         
@@ -258,7 +268,7 @@ class Agent(object):
         #if all else fails, stop being a scout
         if self.goal is None:
             self.__class__.SCOUTS.remove(self.id)
-            self.trooperBehaviour(obs, ammopacks, not_poss_cps)
+            self.trooperBehaviour(obs, ammopacks, poss_cps, not_poss_cps)
             
             
     def GoalToAction(self, obs):
