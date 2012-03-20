@@ -11,9 +11,8 @@ class Agent(object):
     AMMOPACKS_UPDATED = []
     LAST_ROUND = -1
     
+    MAX_RECORDED_LOCATIONS = 5
     GOALS = []
-    
-    #CPS_LOC = []
     
     # ===== Constants =====
     
@@ -40,6 +39,9 @@ class Agent(object):
         self.goal = None
         self.scout_goal = None
         
+        self.PREVIOUS_AGENT_LOCATIONS = []
+        self.RECORDED_LOCATIONS = 0
+        
         self.__class__.UNVISITED = self.mesh.keys()
         
         if id == self.__class__.FIRST_AGENT_ID:
@@ -51,9 +53,23 @@ class Agent(object):
         self.observation = observation
         self.selected = observation.selected
         
+        # For each agent, record its previous MAX_RECORDED_LOCATIONS (x, y) positions        
+        
+        if self.RECORDED_LOCATIONS == self.__class__.MAX_RECORDED_LOCATIONS:
+            self.RECORDED_LOCATIONS = 0
+            
+        if len(self.PREVIOUS_AGENT_LOCATIONS) < self.__class__.MAX_RECORDED_LOCATIONS:
+            self.PREVIOUS_AGENT_LOCATIONS.append(observation.loc)
+        else:
+            self.PREVIOUS_AGENT_LOCATIONS[self.RECORDED_LOCATIONS] = observation.loc
+        
+        #print "Recorded locations {0}: {1}".format(self.id, self.RECORDED_LOCATIONS)
+        #print "Agent {0}, {1}: {2}".format(self.id, self.RECORDED_LOCATIONS, self.PREVIOUS_AGENT_LOCATIONS)
+        self.RECORDED_LOCATIONS = self.RECORDED_LOCATIONS + 1
+        
         # Reinitialize the ENEMIES list each round
         
-        if self.id == 0:
+        if self.id == self.__class__.FIRST_AGENT_ID:
             self.__class__.ENEMIES = []
             
         # Add the positions of the teammates to the TEAMMATES list
@@ -69,22 +85,23 @@ class Agent(object):
             for enemy in observation.foes:
                 if not enemy in self.__class__.ENEMIES:
                     self.__class__.ENEMIES.append(enemy)
-                    
-        #print "Agent ID: ", self.id
         
     def action(self):
         
         # TODO LIST:
+        
         #1. Do not overcrowd the same goals.
         #2. Do not get stuck on same team members.
         #3. Do not run around like idiots when spawncamping.
         #4. Do not hit your head to the walls.
         
-        
         # shorthand for observations
         obs = self.observation
-          
         
+        # remove goal if reached
+        if self.goal is not None and point_dist(self.goal, obs.loc) < self.settings.tilesize:
+            self.goal = None
+                  
         #save spawn area
         #this code only runs once, in the beginning of each match!             
         
@@ -94,14 +111,12 @@ class Agent(object):
         # find the CPs we have and have not captured yet
         poss_cps = filter(lambda x: x[2] == self.team, self.observation.cps)
         not_poss_cps = filter(lambda x: x[2] != self.team, self.observation.cps)
+        
         # find ammopacks within visual range
         ammopacks = filter(lambda x: x[2] == "Ammo", obs.objects)
+        
         # compare visible ammopacks with the ones in memory
         self.updateAmmopacks(obs, ammopacks)
-        
-        # remove goal if reached    
-        if self.goal is not None and point_dist(self.goal, obs.loc) < self.settings.tilesize:
-            self.goal = None
              
         # if we reach an unexplored node from the mesh graph, 
         # remove it from the list of unvisited nodes           
@@ -116,11 +131,11 @@ class Agent(object):
         self.greedyGoal(ammopacks, obs, not_poss_cps)        
             
         # decide goal based on role
-        if self.goal is None:    
+        if self.goal is None:
             if self.id in self.__class__.SCOUTS:
                 self.scoutBehaviour(ammopacks, obs, poss_cps, not_poss_cps)
-            else:            
-                self.trooperBehaviour(obs, ammopacks, poss_cps, not_poss_cps)       
+            else:
+                self.trooperBehaviour(obs, ammopacks, poss_cps, not_poss_cps)
             
         #print extra information when selected
         self.printInfo(obs, ammopacks)
@@ -133,7 +148,6 @@ class Agent(object):
         # if I see an ammopack for the first time
         # add both that one and its symmetric to the list of ammopack locations
         for pack in ammopacks:
-            #print "AMMOPACKS_X: ", pack
             self.__class__.AMMOPACKS_LOC[(pack[0], pack[1])] = self.settings.ammo_rate
             self.__class__.AMMOPACKS_LOC[(self.__class__.MAP_WIDTH - pack[0], pack[1])] = self.settings.ammo_rate
             
@@ -215,7 +229,7 @@ class Agent(object):
         
         # remove goal if it is a CP we already control
         if self.goal is not None and self.goal not in map(lambda x: x[0:2], not_poss_cps):
-            self.goal = None            
+            self.goal = None
             
         # If enemy is nearest to CP we own, start going back to defend/recapture
         for cp in poss_cps:
@@ -245,8 +259,6 @@ class Agent(object):
                 
     
     def scoutBehaviour(self, ammopacks, obs, poss_cps, not_poss_cps):  
-                
-    
                         
         # check my list of ammopack locations and go towards the best one
         if self.goal is None and len(self.__class__.AMMOPACKS_LOC) > 0:
@@ -262,7 +274,7 @@ class Agent(object):
         # if we have not found all the ammo locations, start exploring unvisited nodes
         if self.goal is None and len(self.__class__.AMMOPACKS_LOC) < self.__class__.NUM_AMMO_LOCS and self.observation.step > self.__class__.EXPLORE_WAIT_STEPS:                    
             closest_node = reduce(self.min_dist, self.__class__.UNVISITED)
-            self.goal = closest_node       
+            self.goal = closest_node
             #print "Let's go exploring!"
 
         #if all else fails, stop being a scout
@@ -280,22 +292,9 @@ class Agent(object):
         # shoot the motherfucker!  
         shoot = False
         
-        #if (obs.ammo > 0 and obs.foes and 
-            #point_dist(obs.foes[0][0:2], obs.loc) < self.settings.max_range
-            #and not line_intersects_grid(obs.loc, obs.foes[0][0:2], self.grid, self.settings.tilesize)):            
-            #self.goal = obs.foes[0][0:2]
-            #shoot = True
-            
-            
         if obs.ammo > 0:
             closeToEnemysSpawn = False
             
-            # I have ammo. I don't shoot at enemy which is respawning
-            
-            #for spawn_loc in self.__class__.SPAWN_LOC:
-                #if point_dist((656 - spawn_loc[0], spawn_loc[1]), obs.loc) < 35:
-                    #closeToEnemysSpawn = True
-                    
             # If I am not in the enemy's spawn area and I see some enemies in my proximity and I can shoot them without harming my friends, I do it !
             
             possible_targets_list = []
@@ -349,25 +348,37 @@ class Agent(object):
             #    speed = 0                
             
             speed = (dx**2 + dy**2)**0.5
-
             
         else:
             turn = 0
             speed = 0
             
+        # If the agent hasn't changed its position for MAX_RECORDED_LOCATIONS
+        # rounds and it is not in the respawn area, there is a high probability
+        # that it got stuck somewhere. In that case, try to escape.
+            
+        if len(self.PREVIOUS_AGENT_LOCATIONS) > 1:
+            agent_changed_location = False
+            first_loc = self.PREVIOUS_AGENT_LOCATIONS[0]
+            
+            for loc in self.PREVIOUS_AGENT_LOCATIONS:
+                if point_dist(loc, first_loc) > 2 * self.settings.tilesize:
+                    agent_changed_location = True
+                    break
+            
+            if agent_changed_location == False:
+                turn = self.settings.max_turn
+                speed = math.floor(self.settings.max_speed / 4)
+                self.PREVIOUS_AGENT_LOCATIONS = []
+                self.RECORED_LOCATIONS = 0
+        
         # Add the current goal to the GOALS list
             
         if len(self.__class__.GOALS) < self.__class__.TEAM_SIZE:
             self.__class__.GOALS.append(self.goal)
         else:
             self.__class__.GOALS[self.id] = self.goal
-<<<<<<< HEAD
-        
-=======
-
-        speed = speed * self.vm_speedbias()
-
->>>>>>> fef7f000dde46d14e94dca2ebfa2dde3602f6f6f
+            
         return (turn, speed, shoot)
 
     def printInfo(self, obs, ammopacks):
@@ -379,7 +390,7 @@ class Agent(object):
             #print "Ammo locations number: {0}".format(len(self.__class__.AMMOPACKS_LOC))
             #print "Locations of teammates: ", self.__class__.TEAMMATES
             #print "Locations of enemies: ", self.__class__.ENEMIES
-            print "Current goals: ", self.__class__.GOALS
+            #print "Current goals: ", self.__class__.GOALS
             
             pass
         
@@ -414,87 +425,7 @@ class Agent(object):
     
     
     # ===== Auxilliary functions =====
-
-    def vm_speedbias(self):
-        if 1:
-            return self.vm_speedbias_simple()
-        else:
-            return self.vm_speedbias_complicated()
-
-    def vm_speedbias_simple(self):
-        """
-        Determines the angle difference between self and goal.
-        If there are no walls between self and goal then check if the angle is right.
-        Then, calculate the speed variation according angle remaining to turn:
-        The more I need to turn the less I move.
-        """
-        wall_to_goal = line_intersects_grid(self.observation.loc, self.goal, self.grid, self.settings.tilesize)
-        dx = self.observation.loc[0] - self.goal[0]
-        dy = self.observation.loc[1] - self.goal[1]
-        angle_difference = math.pi - (math.fabs(angle_fix(math.atan2(dy, dx) - self.observation.angle)))
-        speedbias = 1
-        if not wall_to_goal and angle_difference > self.settings.max_turn:
-            alpha = angle_difference - self.settings.max_turn
-            if alpha > self.settings.max_turn:
-                alpha = self.settings.max_turn / alpha
-            else:
-                alpha = 1 - alpha / self.settings.max_turn
-            speedbias = alpha
-        return speedbias
-
-    def vm_speedbias_complicated(self):
-        """
-        Determines the angle difference between self and goal.
-        If there are no walls between self and goal then check if the angle is right.
-        If there are walls, check if I need more turns.
-        Then, calculate the speed variation according angle remaining to turn:
-        The more I need to turn the less I move.
-        Unless there is an enemy in range or depending on my distance to the goal.
-        """
-        wall_to_goal = line_intersects_grid(self.observation.loc, self.goal, self.grid, self.settings.tilesize)
-        distance_to_goal = point_dist(self.observation.loc, self.goal)
-        enemy_within_shooting_range = False
-        if self.observation.foes:
-            for enemy in self.observation.foes:
-                if point_dist(enemy[0:2], self.observation.loc) < self.settings.max_range and not line_intersects_grid(self.observation.loc, enemy[0:2], self.grid, self.settings.tilesize):
-                    enemy_within_shooting_range = True
-        dx = self.observation.loc[0] - self.goal[0]
-        dy = self.observation.loc[1] - self.goal[1]
-        angle_difference = math.pi - (math.fabs(angle_fix(math.atan2(dy, dx) - self.observation.angle)))
-        alpha = angle_difference - self.settings.max_turn
-        if angle_difference > self.settings.max_turn:
-            angle_difference = 1
-            if alpha > self.settings.max_turn:
-                alpha = self.settings.max_turn / alpha
-            else:
-                alpha = 1 - alpha / self.settings.max_turn
-        else:
-            alpha = 1
-            angle_difference = 0
-        if wall_to_goal:
-            if alpha > math.pi * 3/2:
-                wall_to_goal = 2
-            else:
-                wall_to_goal = 0
-        else:
-            wall_to_goal = 0
-        if distance_to_goal > self.settings.max_see:
-            distance_to_goal = 4
-        else:
-            distance_to_goal = 0
-        speedbias = 1
-        chmod = angle_difference + wall_to_goal + distance_to_goal
-        # if chmod == 0 or chmod == 2 or chmod == 4 or chmod == 6:
-        if chmod == 1:
-            speedbias = alpha
-        elif chmod == 3 or chmod == 5:
-            speedbias = alpha/4
-        elif chmod == 7:
-            speedbias = alpha/8
-        if enemy_within_shooting_range:
-            speedbias = 1/2
-        return speedbias
-
+        
     def compare_spawn_dist(self, cp_loc):
         path = find_path(self.observation.loc, cp_loc[0:2], self.mesh, self.grid, self.settings.tilesize)
         return self.path_length(self.__class__.SPAWN_LOC, path)
@@ -580,3 +511,8 @@ class Agent(object):
                 min_loc = loc
         
         return min_loc
+
+            
+
+    
+    
