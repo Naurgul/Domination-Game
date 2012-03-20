@@ -11,9 +11,8 @@ class Agent(object):
     AMMOPACKS_UPDATED = []
     LAST_ROUND = -1
     
+    MAX_RECORDED_LOCATIONS = 5
     GOALS = []
-    
-    #CPS_LOC = []
     
     # ===== Constants =====
     
@@ -26,10 +25,8 @@ class Agent(object):
     NUM_AMMO_LOCS = 6
     AMMO_EXPECTATION_WEIGHT = 750
     EXPLORE_WAIT_STEPS = 50
-    #MAX_AGENTS_PER_CP = 3
     
-    # ===============
-    
+    # ===============    
 
     def __init__(self, id, team, settings = None, field_rects = None, field_grid = None, nav_mesh = None):
         self.id = id
@@ -38,8 +35,10 @@ class Agent(object):
         self.grid = field_grid
         self.settings = settings
         self.goal = None
-        self.scout_goal = None
+        #self.scout_goal = None
         
+        self.PREVIOUS_AGENT_LOCATIONS = []
+        self.RECORDED_LOCATIONS = 0        
         self.__class__.UNVISITED = self.mesh.keys()
         
         if id == self.__class__.FIRST_AGENT_ID:
@@ -50,6 +49,29 @@ class Agent(object):
     def observe(self, observation):
         self.observation = observation
         self.selected = observation.selected
+        in_spawn_area = False
+                
+        for loc in self.__class__.SPAWN_LOC:
+            if point_dist(loc, observation.loc) < self.settings.tilesize:
+                in_spawn_area = True
+                break
+        
+        if in_spawn_area == True:
+            print "Agent {0} is in the spawn area. Reinitializing...".format(self.id)
+            self.PREVIOUS_AGENT_LOCATIONS = []
+            self.RECORDED_LOCATIONS = 0
+                
+        # For each agent, record its previous MAX_RECORDED_LOCATIONS (x, y) positions        
+                        
+        if self.RECORDED_LOCATIONS == self.__class__.MAX_RECORDED_LOCATIONS:
+            self.RECORDED_LOCATIONS = 0
+                            
+        if len(self.PREVIOUS_AGENT_LOCATIONS) < self.__class__.MAX_RECORDED_LOCATIONS:
+            self.PREVIOUS_AGENT_LOCATIONS.append(observation.loc)
+        else:
+            self.PREVIOUS_AGENT_LOCATIONS[self.RECORDED_LOCATIONS] = observation.loc
+        
+        self.RECORDED_LOCATIONS = self.RECORDED_LOCATIONS + 1        
         
         # Reinitialize the ENEMIES list each round
         
@@ -70,8 +92,6 @@ class Agent(object):
                 if not enemy in self.__class__.ENEMIES:
                     self.__class__.ENEMIES.append(enemy)
                     
-        #print "Agent ID: ", self.id
-        
     def action(self):
         
         # TODO LIST:
@@ -79,12 +99,10 @@ class Agent(object):
         #2. Do not get stuck on same team members.
         #3. Do not run around like idiots when spawncamping.
         #4. Do not hit your head to the walls.
-        
-        
+                
         # shorthand for observations
         obs = self.observation
-          
-        
+
         #save spawn area
         #this code only runs once, in the beginning of each match!             
         
@@ -94,6 +112,7 @@ class Agent(object):
         # find the CPs we have and have not captured yet
         poss_cps = filter(lambda x: x[2] == self.team, self.observation.cps)
         not_poss_cps = filter(lambda x: x[2] != self.team, self.observation.cps)
+        
         # find ammopacks within visual range
         ammopacks = filter(lambda x: x[2] == "Ammo", obs.objects)
         # compare visible ammopacks with the ones in memory
@@ -241,12 +260,10 @@ class Agent(object):
             else: # else pick a random CP 
                 self.goal = self.observation.cps[random.randint(0,self.__class__.NUM_POINTS-1)][0:2]
                 
-       
                 
     
     def scoutBehaviour(self, ammopacks, obs, poss_cps, not_poss_cps):  
                 
-    
                         
         # check my list of ammopack locations and go towards the best one
         if self.goal is None and len(self.__class__.AMMOPACKS_LOC) > 0:
@@ -329,6 +346,7 @@ class Agent(object):
                     shoot = True
 
         # use the mesh to find a path to my goal
+        
         path = find_path(obs.loc, self.goal, self.mesh, self.grid, self.settings.tilesize)
 
         # use the path to decide the low level actions I need to take right now
@@ -355,19 +373,34 @@ class Agent(object):
             turn = 0
             speed = 0
             
+            
+        #If the agent hasn't changed its position for MAX_RECORDED_LOCATIONS
+        # rounds and it is not in the respawn area, there is a high probability
+        # that it got stuck somewhere. In that case, try to escape.
+                                           
+        if len(self.PREVIOUS_AGENT_LOCATIONS) > 1:
+            agent_changed_location = False
+            first_loc = self.PREVIOUS_AGENT_LOCATIONS[0]
+           
+            for loc in self.PREVIOUS_AGENT_LOCATIONS:
+                if point_dist(loc, first_loc) > self.settings.tilesize:
+                    agent_changed_location = True
+                    break
+                                   
+            if agent_changed_location == False:
+                print "Agent {0} hasn't changed location".format(self.id)
+                turn = self.settings.max_turn
+                speed = math.floor(self.settings.max_speed / 4)
+                #self.PREVIOUS_AGENT_LOCATIONS = []
+                #self.RECORED_LOCATIONS = 0        
+            
         # Add the current goal to the GOALS list
             
         if len(self.__class__.GOALS) < self.__class__.TEAM_SIZE:
             self.__class__.GOALS.append(self.goal)
         else:
             self.__class__.GOALS[self.id] = self.goal
-<<<<<<< HEAD
         
-=======
-
-        speed = speed * self.vm_speedbias()
-
->>>>>>> fef7f000dde46d14e94dca2ebfa2dde3602f6f6f
         return (turn, speed, shoot)
 
     def printInfo(self, obs, ammopacks):
@@ -379,7 +412,7 @@ class Agent(object):
             #print "Ammo locations number: {0}".format(len(self.__class__.AMMOPACKS_LOC))
             #print "Locations of teammates: ", self.__class__.TEAMMATES
             #print "Locations of enemies: ", self.__class__.ENEMIES
-            print "Current goals: ", self.__class__.GOALS
+            #print "Current goals: ", self.__class__.GOALS
             
             pass
         
@@ -414,87 +447,7 @@ class Agent(object):
     
     
     # ===== Auxilliary functions =====
-
-    def vm_speedbias(self):
-        if 1:
-            return self.vm_speedbias_simple()
-        else:
-            return self.vm_speedbias_complicated()
-
-    def vm_speedbias_simple(self):
-        """
-        Determines the angle difference between self and goal.
-        If there are no walls between self and goal then check if the angle is right.
-        Then, calculate the speed variation according angle remaining to turn:
-        The more I need to turn the less I move.
-        """
-        wall_to_goal = line_intersects_grid(self.observation.loc, self.goal, self.grid, self.settings.tilesize)
-        dx = self.observation.loc[0] - self.goal[0]
-        dy = self.observation.loc[1] - self.goal[1]
-        angle_difference = math.pi - (math.fabs(angle_fix(math.atan2(dy, dx) - self.observation.angle)))
-        speedbias = 1
-        if not wall_to_goal and angle_difference > self.settings.max_turn:
-            alpha = angle_difference - self.settings.max_turn
-            if alpha > self.settings.max_turn:
-                alpha = self.settings.max_turn / alpha
-            else:
-                alpha = 1 - alpha / self.settings.max_turn
-            speedbias = alpha
-        return speedbias
-
-    def vm_speedbias_complicated(self):
-        """
-        Determines the angle difference between self and goal.
-        If there are no walls between self and goal then check if the angle is right.
-        If there are walls, check if I need more turns.
-        Then, calculate the speed variation according angle remaining to turn:
-        The more I need to turn the less I move.
-        Unless there is an enemy in range or depending on my distance to the goal.
-        """
-        wall_to_goal = line_intersects_grid(self.observation.loc, self.goal, self.grid, self.settings.tilesize)
-        distance_to_goal = point_dist(self.observation.loc, self.goal)
-        enemy_within_shooting_range = False
-        if self.observation.foes:
-            for enemy in self.observation.foes:
-                if point_dist(enemy[0:2], self.observation.loc) < self.settings.max_range and not line_intersects_grid(self.observation.loc, enemy[0:2], self.grid, self.settings.tilesize):
-                    enemy_within_shooting_range = True
-        dx = self.observation.loc[0] - self.goal[0]
-        dy = self.observation.loc[1] - self.goal[1]
-        angle_difference = math.pi - (math.fabs(angle_fix(math.atan2(dy, dx) - self.observation.angle)))
-        alpha = angle_difference - self.settings.max_turn
-        if angle_difference > self.settings.max_turn:
-            angle_difference = 1
-            if alpha > self.settings.max_turn:
-                alpha = self.settings.max_turn / alpha
-            else:
-                alpha = 1 - alpha / self.settings.max_turn
-        else:
-            alpha = 1
-            angle_difference = 0
-        if wall_to_goal:
-            if alpha > math.pi * 3/2:
-                wall_to_goal = 2
-            else:
-                wall_to_goal = 0
-        else:
-            wall_to_goal = 0
-        if distance_to_goal > self.settings.max_see:
-            distance_to_goal = 4
-        else:
-            distance_to_goal = 0
-        speedbias = 1
-        chmod = angle_difference + wall_to_goal + distance_to_goal
-        # if chmod == 0 or chmod == 2 or chmod == 4 or chmod == 6:
-        if chmod == 1:
-            speedbias = alpha
-        elif chmod == 3 or chmod == 5:
-            speedbias = alpha/4
-        elif chmod == 7:
-            speedbias = alpha/8
-        if enemy_within_shooting_range:
-            speedbias = 1/2
-        return speedbias
-
+        
     def compare_spawn_dist(self, cp_loc):
         path = find_path(self.observation.loc, cp_loc[0:2], self.mesh, self.grid, self.settings.tilesize)
         return self.path_length(self.__class__.SPAWN_LOC, path)
