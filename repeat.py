@@ -1,11 +1,11 @@
 from domination import core
 
-MATCHES = 20
+MATCHES = 100
 red = blu = 0
 
 for i in range(MATCHES):
-    settings = core.Settings(think_time = 0.0925, max_steps=500)
-    game = core.Game('agent_reinforcement_learning.py', 'agent_reinforcement_learning.py', rendered = False, settings = settings, verbose = False)
+    settings = core.Settings(think_time = 0.0925, max_steps = 500)
+    game = core.Game('agent_rulebased.py', 'agent_rulebased_4.py', rendered = False, settings = settings, verbose = False)
     game.run()
     s = game.stats.score
     if s > 0.55:
