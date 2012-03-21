@@ -9,9 +9,9 @@ class Agent(object):
     SPAWN_LOC = []
     AMMOPACKS_LOC = {}
     AMMOPACKS_UPDATED = []
-    LAST_ROUND = -1
     
     MAX_RECORDED_LOCATIONS = 5
+    MAX_FRIENDS_PER_GOAL = 1
     GOALS = []
     
     # ===== Constants =====
@@ -26,7 +26,7 @@ class Agent(object):
     AMMO_EXPECTATION_WEIGHT = 750
     EXPLORE_WAIT_STEPS = 50
     
-    # ===============    
+    # ===================== 
 
     def __init__(self, id, team, settings = None, field_rects = None, field_grid = None, nav_mesh = None):
         self.id = id
@@ -35,7 +35,6 @@ class Agent(object):
         self.grid = field_grid
         self.settings = settings
         self.goal = None
-        #self.scout_goal = None
         
         self.PREVIOUS_AGENT_LOCATIONS = []
         self.RECORDED_LOCATIONS = 0        
@@ -50,6 +49,8 @@ class Agent(object):
         self.observation = observation
         self.selected = observation.selected
         in_spawn_area = False
+        
+        # Check if the agent is in the spawn area. If it is, re-initialize its positions list
                 
         for loc in self.__class__.SPAWN_LOC:
             if point_dist(loc, observation.loc) < self.settings.tilesize:
@@ -250,7 +251,7 @@ class Agent(object):
         # if I have no goal, 
         if self.goal is None:
             # go to the CP closest to our spawn area that we don't own
-            if len(not_poss_cps) > 0:
+            if len(not_poss_cps) > 0:   
                 closest_cp = reduce(self.min_dist, not_poss_cps)
                 self.goal = closest_cp[0:2]
             # if we control all the CPs and I have ammo, 
@@ -259,9 +260,8 @@ class Agent(object):
                 self.goal = (self.__class__.MAP_WIDTH - self.__class__.SPAWN_LOC[0][0], self.__class__.SPAWN_LOC[0][1])
             else: # else pick a random CP 
                 self.goal = self.observation.cps[random.randint(0,self.__class__.NUM_POINTS-1)][0:2]
-                
-                
-    
+        
+
     def scoutBehaviour(self, ammopacks, obs, poss_cps, not_poss_cps):  
                 
                         
@@ -297,21 +297,7 @@ class Agent(object):
         # shoot the motherfucker!  
         shoot = False
         
-        #if (obs.ammo > 0 and obs.foes and 
-            #point_dist(obs.foes[0][0:2], obs.loc) < self.settings.max_range
-            #and not line_intersects_grid(obs.loc, obs.foes[0][0:2], self.grid, self.settings.tilesize)):            
-            #self.goal = obs.foes[0][0:2]
-            #shoot = True
-            
-            
         if obs.ammo > 0:
-            closeToEnemysSpawn = False
-            
-            # I have ammo. I don't shoot at enemy which is respawning
-            
-            #for spawn_loc in self.__class__.SPAWN_LOC:
-                #if point_dist((656 - spawn_loc[0], spawn_loc[1]), obs.loc) < 35:
-                    #closeToEnemysSpawn = True
                     
             # If I am not in the enemy's spawn area and I see some enemies in my proximity and I can shoot them without harming my friends, I do it !
             
@@ -372,9 +358,8 @@ class Agent(object):
         else:
             turn = 0
             speed = 0
-            
-            
-        #If the agent hasn't changed its position for MAX_RECORDED_LOCATIONS
+
+        # If the agent hasn't changed its position for MAX_RECORDED_LOCATIONS
         # rounds and it is not in the respawn area, there is a high probability
         # that it got stuck somewhere. In that case, try to escape.
                                            
@@ -391,8 +376,28 @@ class Agent(object):
                 print "Agent {0} hasn't changed location".format(self.id)
                 turn = self.settings.max_turn
                 speed = math.floor(self.settings.max_speed / 4)
-                #self.PREVIOUS_AGENT_LOCATIONS = []
-                #self.RECORED_LOCATIONS = 0        
+                
+        if self.goal:
+            tooManyPerGoal = True
+            newGoalIndex = 0
+            
+            while tooManyPerGoal:
+                if self.howManyFriendsPerGoal(self.goal) <= self.__class__.MAX_FRIENDS_PER_GOAL:
+                    tooManyPerGoal = False
+                
+                if tooManyPerGoal:
+                    newGoalIndex = newGoalIndex + 1
+                    
+                    if newGoalIndex == 4:
+                        self.goal == None
+                        tooManyPerGoal = False
+                    elif newGoalIndex == 1:
+                        self.goal = self.observation.cps[0][0:2]
+                    elif newGoalIndex == 2:
+                        self.goal = self.observation.cps[1][0:2]
+                    elif newGoalIndex == 3:
+                        self.goal = self.observation.cps[2][0:2]
+            
             
         # Add the current goal to the GOALS list
             
@@ -533,3 +538,13 @@ class Agent(object):
                 min_loc = loc
         
         return min_loc
+    
+    
+    def howManyFriendsPerGoal(self, goal):
+        friends_per_goal = 0;
+        
+        for index in range (0, len(self.__class__.GOALS) - 1):
+            if index != self.id and goal == self.__class__.GOALS[index]:
+                friends_per_goal = friends_per_goal + 1
+                
+        return friends_per_goal
