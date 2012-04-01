@@ -1,0 +1,18 @@
+not_poss:
+
+excrucians2 - default 99-1
+excrucians2 - cereal3 16-79
+excrucians2 - empire2 100-0
+
+poss:
+
+excrucians2 - default 98-2
+excrucians2 - cereal3 27-67
+excrucians2 - empire2 92-5
+
+
+equal:
+
+excrucians2 - default 100-10
+excrucians2 - cereal3 19-79
+excrucians2 - empire2 93-5

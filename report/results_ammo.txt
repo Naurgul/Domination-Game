@@ -1,0 +1,12 @@
+﻿AMMO_EXPECTATION_WEIGHT = 250
+	empire2	89 - 8
+	cereal3	19 - 74
+AMMO_EXPECTATION_WEIGHT = 750
+	empire2	87 - 10
+	cereal3	22 - 72
+AMMO_EXPECTATION_WEIGHT = 1250
+	empire2	91 - 1
+	cereal3	23 - 71
+AMMO_EXPECTATION_WEIGHT = 1750
+	empire2	93 - 2
+	cereal3	20 - 72

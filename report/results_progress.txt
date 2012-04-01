@@ -1,0 +1,11 @@
+excrucians1 - default 73-14
+excrucians2 - default 99-1
+excrucians3 - default 100-0	
+
+excrucians1-empire2 23-66
+excrucians2 - empire2 94-0
+excrucians3-empire2 82-13
+
+excrucians1 - cereal3 2-98
+excrucians2 - cereal3 20-77
+excrucians3 - cereal3 19-78

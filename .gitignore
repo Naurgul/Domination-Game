@@ -16,3 +16,8 @@ domination/agent_adjustable.py
 agents/*
 replays/*
 *.orig
+*.aux
+*.bbl
+*.blg
+*.log
+*.pdf
