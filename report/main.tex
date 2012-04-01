@@ -45,7 +45,7 @@ The teams start with an equal number of points. At each time step, a team's scor
 
 %The rest of the paper is organized as follows. Section \ref{sec:related_work} reviews the literature for multi-agent POMDPS and describes algorithms that are used to determine optimal policies for this type of problems. Section \ref{sec:reinforcement_learning} describes our learning agent and motivates our choice of submitting the rule-based agent for the final tournament. Section \ref{sec:methodology} describes the methodology we used for the tournament. Section \ref{sec:experimental_results} provides the results for the tests we have performed in order to assess the performance of our agent. Finally, section \ref{sec:conclusion} summarizes our findings and provides our ideas for further improvement.
 
-The rest of the paper is organized as follows. Section \ref{sec:related_work} reviews the state of the practice of the game industry regarding the dilemma of using learning versus rule-based systems. Section \ref{sec:methodology} describes, in detail, our rule-based approach for solving the \emph{Domination Game}. Section \ref{sec:experimental_results} provides the results for the tests we have performed in order to assess the performance of our system. Then, in Section \ref{sec:reinforcement_learning} we discuss some theory and ideas for a learning system, as well as provide some motivation for our focus on the rule-based system. Finally, Section \ref{sec:conclusion} summarizes our findings and provides our ideas for further improvement.
+The rest of the paper is organized as follows. Section \ref{sec:related_work} reviews the state of the practice of the game industry regarding the dilemma of using learning versus rule-based systems. Section \ref{sec:methodology} describes, in detail, our rule-based approach for solving the \emph{Domination Game}. Sections \ref{sec:experimental_setup} and \ref{sec:experimental_results} deal with the experiments we have performed in order to assess the performance of our system. Then, in Section \ref{sec:reinforcement_learning} we discuss some theory and ideas for a learning system, as well as provide some motivation for our focus on the rule-based system. Finally, Section \ref{sec:conclusion} summarizes our findings and provides our ideas for further improvement.
 
 \section{Related Work}
 \label{sec:related_work}
@@ -61,125 +61,129 @@ Even though learning is not and probably cannot be used to solve comprehensive A
 
 \section{Methodology}
 \label{sec:methodology}
-In this section, we provide the methodology we used in our rule-based agent. We give an overview of the main challenges an agent faces throughout the game. We then analyze each of them separately and provide our solutions for tackling the respective problems. 
+In this section, we provide a detailed description of the techniques we used in our rule-based agent. We give an overview of the main challenges an agent faces throughout the game. We then analyze each of them separately and provide our solutions for tackling the respective problems. 
 
-From our perspective, in order to win a game against the enemy, an agent must
+From our perspective, the result of a match hinges on the trade-off between two opposing tasks:
 \begin{itemize}
-\item Collect ammopacks and prevent the enemy from getting into their possession 
-\item Capture the control points and prevent the enemy from re-taking control over them
+\item Collecting ammo (and preventing it from falling into the hands of the enemy)
+\item Capturing the control points (and preventing them from being captured by the enemy)
 \end{itemize}
-With these tasks in mind, a problem that we face is finding a way to share goals among agents. For this purpose, we split the agents into two subteams: \emph{scouts} and \emph{troopers}. Scouts denote agents that are assigned the task to explore the map in order to find the locations of the ammopacks and to collect them. Troopers denote agents that are assigned the task of taking over the control points and re-capturing them whenever they have knowledge of an enemy approaching that control point. 
+The problem of satisfying both tasks can be thought of as finding a way to share goals among agents. A straightforward way to achieve this is to assign a role to each agent on the team. The available roles are \emph{scouts} and \emph{troopers}. Scouts denote agents that are assigned the task to explore the map in order to find the locations of the ammo and to collect it. Troopers denote agents that are assigned the task of capturing and re-capturing control points. At this point, one might note that there is no explicit role for shooting enemies. In our system, this is considered a by-product of achieving our other goals.
 
-We now describe the two mentioned tasks that an agent must perform throughout the game and explain how our agents deal with them.
+%We now describe the two mentioned tasks that an agent must perform throughout the game and explain how our agents deal with them.
+
+\subsection{Role assignment}
+
+The roles are not considered completely separate and independent concepts; instead there is a flow for the agents from one role to the next. Since the primary objective is to capture control points, we expect opponents to congregate close at these locations, so it is important that our troopers are equipped with ammo to shoot at enemies within their range. For this reason, we consider agents that do not have ammo better suited to serve as scouts, while agents that do have ammo are always assigned the role of a trooper. In this way, agents alternate between the two roles: a scout after discovering ammo becomes a trooper, while a trooper after running out of ammo becomes a candidate for turning into a scout. 
+
+The assignment of roles is conducted in a semi-independent manner. At each time step, the number of positions for the role of scout is calculated. We elected that this number should be proportional to the number of control points that are possessed by our team. We made this selection since we want our agents to focus on capturing control points first, especially if they are in the possession of only a few of them. We will explore further options for deciding this in Section \ref{sec:experimental_results}.
+
+Then, if there are any newly open scout positions, any agent that has no ammo will fill them, on a first-come first-served basis. Closed scout positions are phased out progressively, as scouts find ammo and advance into being troopers.
  
-\subsection{Collecting ammopacks}
+\subsection{Collecting ammo}
 \label{subsec:collecting_ammopacks}
-Collecting ammopacks is essential in order to dominate the other team and win the match. But it is also important that the available ammopacks be split among teammates in order to increase the defense against the opponents. 
+Collecting ammo is essential in order to dominate the other team and win the match. In our system, the agents that are in charge of collecting it are the scouts. %But it is also important that the available ammopacks be split among teammates in order to increase the defense against the opponents. Once a scout discovers and collects an ammopack, it is assigned the role of a trooper and another agent who has no ammo is designated to become a scout.
 
-In our system, the agents that are in charge of collecting them are the scouts. Once a scout discovers and collects an ammopack, it is assigned the role of a trooper and another agent who has no ammo is designated to become a scout. At each time step, the number of agents that are assigned the role of becoming scouts is inversely proportional to the number of control points that are {\bf not} possessed by our team. We made this selection since we want our agents to focus on taking over the control points whenever they are in the possession of few of them and to focus on collecting ammopacks (or forcing the enemy into the respawn area) whenever they have control over the majority of control points (or all of them). Occasionally, a trooper may also collect an ammopack from his proximity if no other agent is closer to that ammopack. 
+An overview of scout behaviour is given in Algorithm \ref{alg:scout}. The reason why visible ammo locations are disregarded will be explained in Section \ref{sec:greedygoals}.If there is no convenient ammo location to go to and no all the ammo locations have been discovered, a scout begins to explore the map by moving towards the nodes on the mesh that no agent on the team has visited yet. When an ammo location is discovered, two entries are added to the agents' collective memory, since ammo locations are symmetric with respect to the $y$-axis. %A scout is provided with a list of the locations on the map where ammopacks were located up to that time step. Given this list, it decides towards which ammopack it should move based the distance between the current location and the locations of the previously seen ammopacks. 
 
-The behaviour of a scout is defined by the {\bf scoutBehaviour} function. A scout is provided with a list of the locations on the map where ammopacks were located up to that time step. Given this list, it decides towards which ammopack it should move based the distance between the current location and the locations of the previously seen ammopacks. If not all the ammopacks have been discovered, a scout begins to explore the map by moving towards the nodes on the mesh that were not previously visited. 
+That leaves the issue of ammo expectation: Since agents do not have full observability of the world, they cannot tell at each stage whether ammo is available at certain locations. The agents share knowledge regarding which ammo locations contain ammo and which ones do not. A timer $t$ is incremented for the locations which were observed not to have ammo in the past, while observing an ammo location that has ammo removes all doubt about when its ammo will be replenished\footnote{therefore $t$ is set to its maximum value}. The distance to each ammo location, for purposes of deciding which is the best one, $d_{final}$, is then increased inversely proportionally to its $t$-value: $d_{final} = d_{actual} + \frac{w_{ammo}}{t}$, where $d_{actual}$ is the actual distance and $w_{ammo}$ is a constant weight. The decision for the value of $w_{ammo}$ was the subject of experimentation, as will be seen in Section \ref{sec:experimental_results}.
 
 \begin{algorithm}
-\caption{Code for the scoutBehaviour function}
+\caption{Scout behaviour pseudocode}
+\label{alg:scout}
 \begin{algorithmic}
-\vspace{0.2cm}
-\STATE Given:
-\begin{itemize}
-\item The list of currently visible ammopack locations
-\item The list of currently possessed / not possessed control point locations
-\end{itemize}
-\vspace{0.2cm}
-\STATE Do the following:
-\vspace{0.2cm}
-\IF {agent does not have any goal \AND agent knows locations of ammopacks}
-\STATE Filter ammopack locations based on distance
-\STATE Get best ammopack location for the current agent
-\STATE Set goal to this ammopack location
+\STATE $ammo\_list \gets$ set of previously discovered ammo locations that are presently out of sight
+\IF {$goal$ is not set from before}
+	\STATE Sort $ammo\_list$ by proximity and ammo expectation
+	\STATE $best\_loc \gets$ best element of $ammo\_list$ 
+	\IF {the ammo expectation of $best\_loc$ is higher than some pre-defined threshold}
+		\STATE $goal \gets best\_loc$
+	\ENDIF
 \ENDIF
-
-\IF {not all ammo locations were found}
-\STATE Set goal to the closest unexplored node
+\IF {$goal$ was not set above \AND not all ammo locations have been discovered}
+	\STATE $goal \gets$ closest unexplored node
 \ENDIF
-
-\IF {everything else fails}
-\STATE Stop being a scout
-\STATE Become a trooper
+\IF {$goal$ is still not set}
+	\STATE Change role to trooper.
 \ENDIF
-\vspace{0.2cm}
 \end{algorithmic}
 \end{algorithm}
 
 \subsection{Capturing control points}
 \label{subsec:capturing_control_points}
-Capturing the control points and remaining in the possession of them is the goal of a trooper. Since the opponents are also going to follow the same goal, it is important that our troopers be equipped with ammo and shoot at enemies whenever these appear in their visibility range. The reason is that there is always the possibility that the opponents also be equipped with ammo and shoot at our agent, causing it to respawn and lose all the gathered ammopacks. For this reason, agents alternate between the scout / trooper roles whenever they run out of ammo / are equipped with ammo.
+The objective of a trooper is capturing control points and making sure that the team maintains their possession. %The reason is that there is always the possibility that the opponents also be equipped with ammo and shoot at our agent, causing it to respawn and lose all the gathered ammopacks. For this reason, agents alternate between the scout / trooper roles whenever they run out of ammo / are equipped with ammo.
 
-The behaviour of a trooper is defined by the {\bf trooperBehaviour} function. A trooper tries to capture the closest control point from his current location and, if they spot an enemy approaching another control point, goes back to re-capture it. If the team is in the possession of all control points, troopers go \emph{spawn camping}, meaning that they engage in an assault meant to force the enemy back into his respawn area and prevent him from escaping and going towards the control points or collecting amopacks.
+The behaviour of a trooper is defined by Algorithm \ref{alg:trooper}. A trooper tries to capture the closest control point from his current location and, if they spot an enemy approaching another control point, goes back to re-capture it. If the team is in the possession of all control points, troopers go \emph{spawn camping}, meaning that they engage in an assault meant to cage the enemies in their spawn area area and prevent them from pursuing any objectives. 
 
 \begin{algorithm}
-\caption{Code for the trooperBehaviour function}
+\caption{Trooper behaviour pseudocode}
+\label{alg:trooper}
 \begin{algorithmic}
-\vspace{0.2cm}
-\STATE Given:
-\begin{itemize}
-\item The list of currently visible ammopack locations
-\item The list of currently possessed / not possessed control point locations
-\end{itemize}
-\vspace{0.2cm}
-\STATE Do the following:
-\vspace{0.2cm}
-\IF {enemy is nearest to CP we own}
-\STATE Start going back to defend / re-capture
+\IF {enemy is closer to one of our control points $cp$ than I am \AND there is no one on our team closer to $cp$ \AND my previous $goal$ is far away}
+	\STATE $goal \gets cp$
 \ENDIF
-
-\IF {agent still does not have any goal}
-\IF {there is at least one unpossessed control point}
-\STATE Set goal to the closest unpossessed control point
-\ELSE \IF {all control points are possessed \AND agent has ammo}
-\STATE Go spawn camping
+\IF {there is at least one control point we do not possess}
+	\STATE $goal \gets$ closest un-captured control point
+\ELSE \IF {I have ammo}
+	\STATE $goal \gets$ enemy spawn area
 \ELSE
-\STATE Occupy a random control point
+	\STATE $goal \gets$ random control point
 \ENDIF
 \ENDIF
-\ENDIF
-
-\IF {everything else fails}
-\STATE Stop being a scout
-\STATE Become a trooper
-\ENDIF
-\vspace{0.2cm}
 \end{algorithmic}
 \end{algorithm}
 
-A problem that we faced in our experiments was that troopers were shooting at own teammates whenever the latter ones were being positioned between the former and enemies entering the visibility range. To overcome this, we implemented a feature that allows agents to shoot whenever there is no obstacle standing between them and the enemies (such as a wall), as well as a teammate. Another problem we faced was that agents from the same were occasionally colliding with each other and getting stuck when they were going for a goal. To overcome this, we implemented a feature that enables the agent to change position if it has not moved for a pre-defined number of stages.
+\subsection{Greedy goals}
+\label{sec:greedygoals}
+
+If agents were to strictly abide by their rigid role assignment, then there is a number of inefficiencies that would occur. It's not hard to imagine a scout passing next to an unprotected control point and not capturing it or, conversely, a trooper passing next to some ammo and deciding to leave it alone. For this reason, agents are allowed to act outside of their role responsibilities if some conditions are met. 
+
+If an objective, ammo location that has ammo or an uncaptured control point, is within visible range of an agent and at the same time there is no other visible agent, friend or foe, that is closer to that objective, then the agent forgets about their previous goal and sets that objective as their goal. This explains why scouts don't explicitly consider ammo locations that are close: if they see one, they will go get it regardless of their role-defined goal.
+
+\subsection{Low level improvements}
+
+There is a number of small low-level improvements that improve the agents' efficiency. One of them is using path distance instead of Euclidean distance. When the distance to a position of the map is needed, we generate a path to that position and add the distances between the nodes in the path. That gives a more accurate metric when comparing distances. However, this is computationally costly so it not used when we expect that the additional accuracy will result in significantly better efficiency. 
+
+Another is preventing friendly fire or wasting ammo: Agents are not allowed to shoot whenever there is an obstacle, such as a wall or a teammate, standing between them and their target enemy. Additionally, the agent is prevented from shooting if it is detected that their target is in the enemy spawn area.
+
+Target selection is also a small but not insignificant detail. When an agent has a choice between multiple enemies to shoot at, they choose to shoot the one that would require them to make the smallest angle turn. 
+
+Finally, turning and moving can get an agent farther from their target if the angle is not small enough. To counteract this, the speed is set to be proportional the absolute value of the turning angle that needs to be performed. In the same vein, we consider an agent stuck if they have not moved for a pre-defined number of stages. Then, they perform a heuristic manoeuvre that has been shown to help them get unstuck. 
+
+%A problem that we faced in our experiments was that troopers were shooting at own teammates whenever the latter ones were being positioned between the former and enemies entering the visibility range. To overcome this, we implemented a feature that allows agents to shoot whenever there is no obstacle standing between them and the enemies (such as a wall), as well as a teammate. Another problem we faced was that agents from the same were occasionally colliding with each other and getting stuck when they were going for a goal. To overcome this, we implemented a feature that enables the agent to change position if it has not moved for a pre-defined number of stages.
 
 \section{Experimental Setup}
 \label{sec:experimental_setup}
-In this section, we describe the experiments we perform in order to assess the performance of our agents. Each experiment consists in running a number of 100 games with default game settings between our agent and an opponent. To this point, we divide our experiments into two main categories: \emph{agent progress} and \emph{feature progress}. 
+In this section, we describe the experiments we perform in order to assess the performance of our agents. Each experiment consists of running 100 matches\footnote{using the default game settings} between our agents and an opponent. We have chosen three fixed opponents to use as a benchmark: one is the default agent while the others are taken from the agents submitted by other teams. We divide our experiments into two main categories: \emph{general progress} and \emph{parameter testing}. 
 
-\subsection{Agent Progress}
-\label{sub:agent_progress}
-For the first category, we assessed the overall performance of our agent throughout the tournament in terms of average won games in order to see whether the features we included at each stage proved effective or not. We tested each of the three versions (for each stage of the tournament) we submitted against the default agent, as well as against the corresponding versions of the agents submitted by the two teams (team 1 and team 5) that ended up right ahead us in the final tournament.
-\subsection{Feature Progress}
-\label{sub:feature_progress}
-For the second category, we assessed the performance of individual features that we included in the agent. For this purpose, we performed two experiments. In the first experiment, we tested the impact of varying the maximum number of scouts that are sent to collect ammopacks on the performance of the agent. We refer to this as \emph{Scouts Experiment}. In our agent, the number of scouts is a function of the number of control points that are not possessed, given by the formula
-\begin{equation*}
-\mbox{max\_scouts} = \dfrac{\mbox{team\_size}}{\mbox{nr\_of\_not\_poss\_cps} + 1}
-\end{equation*}
+%\subsection{General Progress}
+%\label{sub:agent_progress}
+For the first category, we assessed the overall performance of our agent in various stages of development. %throughout the tournament in terms of average won games in order to see whether the features we included at each stage proved effective or not. We tested each of the three versions (for each stage of the tournament) we submitted against the default agent, as well as against the corresponding versions of the agents submitted by the two teams (team 1 and team 5) that ended up right ahead us in the final tournament.
 
-This means that whenever there is a larger number of control points that are not possessed, a smaller number of agents become scouts and, therefore, a larger number of agents are sent to take over the control points. In this experiment, we also tested the performance in terms of average number of won mathces against the opponents when:
-\begin{itemize}
-\item The number of scouts is equal to the number of troopers, namely
-\begin{equation*}
-\mbox{max\_scouts} = \dfrac{\mbox{team\_size}}{2}
-\end{equation*}
-\item The number of scouts depends of the number of control points that are possessed, namely 
-\begin{equation*}
-\mbox{max\_scouts} = \dfrac{\mbox{team\_size}}{\mbox{nr\_of\_poss\_cps} + 1}
-\end{equation*}
-\end{itemize}
+%\subsection{Feature Progress}
+%\label{sub:feature_progress}
+For the second category, we assessed the performance effect of the values of individual parameters of the agent. We performed experiments for two parameters: 
 
-In the third and final experiment, we tested the agents' ability of correctly estimating the availability of ammopacks. We refer to this as \emph{Ammopacks Experiment}. Since agents do not have full observability of the world, they cannot tell at each stage whether ammopacks are available at certain locations. For this reason, they need to estimate the respawn time and go for an ammopack only the moment they consider something is to be found at that specific location.
+The first parameter was the maximum number of scouts that are sent to collect ammo . We refer to this as \emph{Scouts Experiment}. In our system this number is set to be proportional to the number of captured control points. For this experimented, we have tried setting it to be inversely proportional to the number of captured control points as well as constant and equal to half the team size.
+
+%In our agent, the number of scouts is a function of the number of control points that are not possessed, given by the formula
+%\begin{equation*}
+%\mbox{max\_scouts} = \dfrac{\mbox{team\_size}}{\mbox{nr\_of\_not\_poss\_cps} + 1}
+%\end{equation*}
+
+%This means that whenever there is a larger number of control points that are not possessed, a smaller number of agents become scouts and, therefore, a larger number of agents are sent to take over the control points. In this experiment, we also tested the performance in terms of average number of won mathces against the opponents when:
+%\begin{itemize}
+%\item The number of scouts is equal to the number of troopers, namely
+%\begin{equation*}
+%\mbox{max\_scouts} = \dfrac{\mbox{team\_size}}{2}
+%\end{equation*}
+%\item The number of scouts depends of the number of control points that are possessed, namely 
+%\begin{equation*}
+%\mbox{max\_scouts} = \dfrac{\mbox{team\_size}}{\mbox{nr\_of\_poss\_cps} + 1}
+%\end{equation*}
+%\end{itemize}
+
+For the second parameter, we tested various values for the parameter $w_{ammo}$, which controls the trade-off between ammo location distance and the availability of ammo there. We refer to this as \emph{Ammopacks Experiment}. % For this reason, they need to estimate the respawn time and go for an ammopack only the moment they consider something is to be found at that specific location.
 
 \section{Experimental Results}
 \label{sec:experimental_results}
@@ -206,14 +210,14 @@ Tournament 3 & 100 & 82 & 19 \\
 
 \begin{figure}[!h]
 \centering
-\includegraphics[scale = 0.7]{progress.png}
+\includegraphics[width=\columnwidth]{progress.png}
 \end{figure}
 
 In tournament 2, there were some improvements regarding the behaviour of different classes of agents and goal selection, along with development of better cooperation and decision making methods.
 
 First of all there was a difference between the divisions of agents in the two classes, as described in the \emph{Experimental Setup} section. The "Greedy Goal" was introduced that integrated the ammopack hunting, disregarding the class if needed. Extra features were added in the behaviour of the two agent classes; the trooper would now return to a control point to defend it if there was an enemy heading that way, while a scout would stop being a scout if everything failed, meaning if there were no ammopacks that could be hunt down and nothing else to explore.
 
-Regarding the cooperation among the agents, there was an ammopack updating method available, which involved a list being shared between the agents. According to that list of "updated" ammopacks, the agents would avoid trying to visit the same ammopack in the same round. This saved a lot of unnecessary moves. Concerning the various decision making methods, one good example would be that the enemy that would be shot at, was selected after some more strict criteria. Main conditions also applied, like being in the right distance with no walls or fellows inside the line of fire, but there was a list generated with all those available to shoot at. From that list the best candidate would now be selected by the result of checking for whom the agent needed the least angle degrees for the turn action. Together with this minimum turn, there were many other functions computing the best distance from a target, used throughout the code.
+Regarding the cooperation among the agents, there was an ammopack updating method available, which involved a list being shared between the agents. According to that list of ``updated'' ammopacks, the agents would avoid trying to visit the same ammopack in the same round. This saved a lot of unnecessary moves. Concerning the various decision making methods, one good example would be that the enemy that would be shot at, was selected after some more strict criteria. Main conditions also applied, like being in the right distance with no walls or fellows inside the line of fire, but there was a list generated with all those available to shoot at. From that list the best candidate would now be selected by the result of checking for whom the agent needed the least angle degrees for the turn action. Together with this minimum turn, there were many other functions computing the best distance from a target, used throughout the code.
 
 In tournament 3, collision detection was employed. A list containing a fixed number of self previous locations on the map was retained by each agent. An agent would detect whenever its location on the map had not changed for a couple of rounds and change its orientation in order to escape and reach the current goal. This feature did not improve performance significantly, but it allowed agents from the same team to escape whenever they were getting stuck into each other while going for the goals. 
 
