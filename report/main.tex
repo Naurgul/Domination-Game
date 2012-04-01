@@ -164,7 +164,7 @@ For the first category, we assessed the overall performance of our agent in vari
 %\label{sub:feature_progress}
 For the second category, we assessed the performance effect of the values of individual parameters of the agent. We performed experiments for two parameters: 
 
-The first parameter was the maximum number of scouts that are sent to collect ammo . We refer to this as \emph{Scouts Experiment}. In our system this number is set to be proportional to the number of captured control points. For this experimented, we have tried setting it to be inversely proportional to the number of captured control points as well as constant and equal to half the team size.
+The first parameter was the maximum number of scouts that are sent to collect ammo . We refer to this as the \emph{Scouts Experiment}. In our system this number is set to be proportional to the number of captured control points. For this experimented, we have tried setting it to be inversely proportional to the number of captured control points as well as constant and equal to half the team size.
 
 %In our agent, the number of scouts is a function of the number of control points that are not possessed, given by the formula
 %\begin{equation*}
@@ -183,13 +183,13 @@ The first parameter was the maximum number of scouts that are sent to collect am
 %\end{equation*}
 %\end{itemize}
 
-For the second parameter, we tested various values for the parameter $w_{ammo}$, which controls the trade-off between ammo location distance and the availability of ammo there. We refer to this as \emph{Ammopacks Experiment}. % For this reason, they need to estimate the respawn time and go for an ammopack only the moment they consider something is to be found at that specific location.
+For the second parameter, we tested various values for the parameter $w_{ammo}$, which controls the trade-off between ammo location distance and the availability of ammo there. We refer to this as the \emph{Ammopacks Experiment}. % For this reason, they need to estimate the respawn time and go for an ammopack only the moment they consider something is to be found at that specific location.
 
 \section{Experimental Results}
 \label{sec:experimental_results}
 In this section, we provide the results of our experiments.
 
-\subsection{Agent Progress}
+\subsection{General progress}
 While our agent constantly improved over the default agent, the features we implemented were not sufficient to make the agent always win against other opponents. Table \ref{table:1} shows the number of won matches (out of 100) against the default agent and the two teams that ended up right ahead us, for each version we submitted.
 \begin{table}[!h]
 \centering
@@ -217,48 +217,18 @@ In tournament 2, there were some improvements regarding the behaviour of differe
 
 First of all there was a difference between the divisions of agents in the two classes, as described in the \emph{Experimental Setup} section. The "Greedy Goal" was introduced that integrated the ammopack hunting, disregarding the class if needed. Extra features were added in the behaviour of the two agent classes; the trooper would now return to a control point to defend it if there was an enemy heading that way, while a scout would stop being a scout if everything failed, meaning if there were no ammopacks that could be hunt down and nothing else to explore.
 
-Regarding the cooperation among the agents, there was an ammopack updating method available, which involved a list being shared between the agents. According to that list of ``updated'' ammopacks, the agents would avoid trying to visit the same ammopack in the same round. This saved a lot of unnecessary moves. Concerning the various decision making methods, one good example would be that the enemy that would be shot at, was selected after some more strict criteria. Main conditions also applied, like being in the right distance with no walls or fellows inside the line of fire, but there was a list generated with all those available to shoot at. From that list the best candidate would now be selected by the result of checking for whom the agent needed the least angle degrees for the turn action. Together with this minimum turn, there were many other functions computing the best distance from a target, used throughout the code.
+Regarding the cooperation among the agents, there was an ammopack updating method available, which involved a list being shared between the agents. According to that list of "updated" ammopacks, the agents would avoid trying to visit the same ammopack in the same round. This saved a lot of unnecessary moves. Concerning the various decision making methods, one good example would be that the enemy that would be shot at, was selected after some more strict criteria. Main conditions also applied, like being in the right distance with no walls or fellows inside the line of fire, but there was a list generated with all those available to shoot at. From that list the best candidate would now be selected by the result of checking for whom the agent needed the least angle degrees for the turn action. Together with this minimum turn, there were many other functions computing the best distance from a target, used throughout the code.
 
 In tournament 3, collision detection was employed. A list containing a fixed number of self previous locations on the map was retained by each agent. An agent would detect whenever its location on the map had not changed for a couple of rounds and change its orientation in order to escape and reach the current goal. This feature did not improve performance significantly, but it allowed agents from the same team to escape whenever they were getting stuck into each other while going for the goals. 
 
-Another feature that was added was goal sharing. Since multiple agents could be assigned the same goal throughout the game, we limited the maximum number of agent per each goal to a pre-defined threshold. Whenever there a number of agents above a pre-defined threshold going for the same goal, agents would 
+Another feature that was added was goal sharing. Since multiple agents could be assigned the same goal throughout the game, we limited the maximum number of agents that could go for the same goal, to a pre-defined constant. The rest of the agents were assigned the task of capturing the control points. This feature did not perform well in the final tournament, as the same version of the agent but without goal sharing proved to be more effective against the opponents.
 
-\subsection{Feature Progress}
+\subsection{Parameter testing}
 \subsubsection{Scouts Experiment}
-\begin{table}[!h]
-\centering
-\begin{tabular}{|c|c|c|c|}
-\hline
-& Default agent & Team 1 & Team 5 \\
-\hline
-Not Possessed & 99 & 100 & 16 \\
-\hline
-Possessed & 98 & 92 & 27 \\
-\hline
-Equal & 100 & 93 & 19 \\
-\hline
-\end{tabular}
-\label{table:2}
-\caption{Number of wins for the Scouts Experiment}
-\end{table}
 
-\subsubsection{Ammopacks Experiment}
-\begin{table}[!h]
-\centering
-\begin{tabular}{|c|c|c|c|}
-\hline
-& Default agent & Team 1 & Team 5 \\
-\hline
-Not Possessed & 0 & 0 & 0 \\
-\hline
-Possessed & 0 & 0 & 0 \\
-\hline
-Equal & 0 & 0 & 0 \\
-\hline
-\end{tabular}
-\label{table:3}
-\caption{Number of wins for the Ammopacks Experiment}
-\end{table}
+Based on the match results versus the three opponent teams, employing less scouts to collect ammopacks whenever more control points were being in the possession of the agent, did not make any substantial difference. With the number of scouts being half of the team, no further improvements could be observed either. A probably better strategy would have been to first send the agents collect all the available ammopacks and then assign scout roles to agent whenever they would run out of ammo.
+
+
 
 \section{Reinforcement Learning}
 \label{sec:reinforcement_learning}
@@ -374,8 +344,9 @@ Focussing on smaller subproblems to be solved by reinforcement learning could be
 
 \section{Conclusion}
 \label{sec:conclusion}
-In this paper, we presented our approaches for the \emph{Domination} game. While a rule-based system was easier to implement and usually less computationally expensive, it proved difficult to find strategies that work effectively against all of the opponents. On the other hand, a learning system, despite its potential, proved to be an infeasible solution due to hardware and time constraints.
+In this paper, we presented our approaches for the \emph{Domination} game. While a rule-based system was easier to implement and usually less computationally expensive, it proved difficult to find strategies that work effectively against all of the opponents. Our experiments have shown that tunning parameters that describe the behaviour of the agent does not significantly increase the overall performance. Instead, strategically better rules should be seeked in order to make a difference.
 
+On the other hand, a learning system, despite its potential, proved to be an infeasible solution due to hardware and time constraints. Probably a better performance would be obtained by defining a set of rules that describe the behaviour of the agent and learning which one should be used in each situation, based on the previous experience. We plan to employ these changes in a future project.
 
 
 \begin{thebibliography}{99}
