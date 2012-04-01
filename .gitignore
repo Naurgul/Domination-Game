@@ -21,3 +21,4 @@ replays/*
 *.blg
 *.log
 *.pdf
+*.out
