@@ -32,7 +32,7 @@ Designing a competitive squad-based multi-agent system that is capable of acting
 \section{Introduction}
 \label{sec:introduction}
 
-The \emph{Domination Game} \cite{domination} is a finite-horizon multi-agent game in which two teams of agents compete for the possession of three control points. A control point is captured the moment after a team has more agents standing on it than the other one and remains in in that team's possession unless captured by the other team. Each agents has a limited range of visibility, making the world partially observable, but is allowed to communicate with their teammates. The map contains packs of ammo which an agent can collect and use to shoot at enemies. Whenever an agent is shot, it remains out of play for a specific duration and then respawns at a designated area, losing any ammo gathered. The map is procedurally generated at the beginning of each match. It is always symmetric with respect to the teams, but other than that the control points, packs of ammo and walls that need to be navigated around are placed randomly, 
+The \emph{Domination Game} \cite{domination} is a finite-horizon multi-agent game in which two teams of agents compete for the possession of three control points. A control point is captured the moment after a team has more agents standing on it than the other one and remains in that team's possession unless captured by the other team. Each agent has a limited range of visibility, making the world partially observable, but is allowed to communicate with their teammates. The map contains packs of ammo which an agent can collect and use to shoot at enemies. Whenever an agent is shot, it remains out of play for a specific duration and then respawns at a designated area, losing any ammo gathered. The map is procedurally generated at the beginning of each match. It is always symmetric with respect to the teams, but other than that, the control points, packs of ammo and walls that need to be navigated around are placed randomly, 
 
 The teams start with an equal number of points. At each time step, a team's score is incremented or decremented based on the difference between the number of control points each team possesses. The game ends when either the time runs out, or one of the teams runs out of points. The team with the highest score is declared the winner.
 
@@ -52,7 +52,7 @@ The rest of the paper is organized as follows. Section \ref{sec:related_work} re
 
 In the game industry, the question of whether AI systems need to learn by themselves or be told in advance how to act seems to be mostly settled in favour of the latter approach. The state of the practice in the industry is heavily geared towards planning, with a strong emphasis on efficiency \cite{gameAIworks}. This is justified, in the sense that a lot of planning techniques are of high time and space complexity and therefore do not fit well with the real-time constraints of the medium. 
 
-With that in mind, it is no wonder that techniques like Behaviour Trees \cite{behaviourtrees}, which are little more than a pre-programmed variation of decision trees, have been particularly popular in the recent past. On the other hand, even the word ``leaning'' is completely absent in the public discussions of industry participants, for example in the Game AI Conference in 2009 \cite{gameAIconf}. 
+With that in mind, it is no wonder that techniques like Behaviour Trees \cite{behaviourtrees}, which are little more than a pre-programmed variation of decision trees, have been particularly popular in the recent past. On the other hand, even the word ``learning'' is completely absent in the public discussions of industry participants, for example in the Game AI Conference in 2009 \cite{gameAIconf}. 
 
 However, learning appears to introduce itself to the industry, mostly thanks to academic endeavours. For instance, the AIIDE 2010 Starcraft Competition \cite{starcraftcomp} was won by an agent developed in Berkeley \cite{overmind}. As part of its planning, the agent utilised potential fields whose parameters were tuned using reinforcement learning. 
 
@@ -84,9 +84,9 @@ Then, if there are any newly open scout positions, any agent that has no ammo wi
 \label{subsec:collecting_ammopacks}
 Collecting ammo is essential in order to dominate the other team and win the match. In our system, the agents that are in charge of collecting it are the scouts. %But it is also important that the available ammopacks be split among teammates in order to increase the defense against the opponents. Once a scout discovers and collects an ammopack, it is assigned the role of a trooper and another agent who has no ammo is designated to become a scout.
 
-An overview of scout behaviour is given in Algorithm \ref{alg:scout}. The reason why visible ammo locations are disregarded will be explained in Section \ref{sec:greedygoals}.If there is no convenient ammo location to go to and no all the ammo locations have been discovered, a scout begins to explore the map by moving towards the nodes on the mesh that no agent on the team has visited yet. When an ammo location is discovered, two entries are added to the agents' collective memory, since ammo locations are symmetric with respect to the $y$-axis. %A scout is provided with a list of the locations on the map where ammopacks were located up to that time step. Given this list, it decides towards which ammopack it should move based the distance between the current location and the locations of the previously seen ammopacks. 
+An overview of scout behaviour is given in Algorithm \ref{alg:scout}. The reason why visible ammo locations are disregarded will be explained in Section \ref{sec:greedygoals}.If there is no convenient ammo location to go to and not all the ammo locations have been discovered, a scout begins to explore the map by moving towards the nodes on the mesh that no agent on the team has visited yet. When an ammo location is discovered, two entries are added to the agents' collective memory, since ammo locations are symmetric with respect to the $y$-axis. %A scout is provided with a list of the locations on the map where ammopacks were located up to that time step. Given this list, it decides towards which ammopack it should move based the distance between the current location and the locations of the previously seen ammopacks. 
 
-That leaves the issue of ammo expectation: Since agents do not have full observability of the world, they cannot tell at each stage whether ammo is available at certain locations. The agents share knowledge regarding which ammo locations contain ammo and which ones do not. A timer $t$ is incremented for the locations which were observed not to have ammo in the past, while observing an ammo location that has ammo removes all doubt about when its ammo will be replenished\footnote{Therefore $t$ is set to its maximum value.}. The distance to each ammo location, for purposes of deciding which is the best one, $d_{final}$, is then increased inversely proportionally to its $t$-value: $d_{final} = d_{actual} + \frac{w_{ammo}}{t}$, where $d_{actual}$ is the actual distance and $w_{ammo}$ is a constant weight. The decision for the value of $w_{ammo}$ was the subject of experimentation, as will be seen in Section \ref{sec:experimental_results}.
+That leaves the issue of ammo expectation: Since agents do not have full observability of the world, they cannot tell at each time step whether ammo is available at certain locations. The agents share knowledge regarding which ammo locations contain ammo and which ones do not. A timer $t$ is incremented for the locations which were observed not to have ammo in the past, while observing an ammo location that has ammo removes all doubt about when its ammo will be replenished\footnote{Therefore $t$ is set to its maximum value.}. The distance to each ammo location, for purposes of deciding which is the best one, $d_{final}$, is then increased inversely proportionally to its $t$-value: $d_{final} = d_{actual} + \frac{w_{ammo}}{t}$, where $d_{actual}$ is the actual distance and $w_{ammo}$ is a constant weight. The decision for the value of $w_{ammo}$ was the subject of experimentation, as will be seen in Section \ref{sec:experimental_results}.
 
 \begin{algorithm}
 \caption{Scout behaviour pseudocode}
@@ -113,7 +113,7 @@ That leaves the issue of ammo expectation: Since agents do not have full observa
 \label{subsec:capturing_control_points}
 The objective of a trooper is capturing control points and making sure that the team maintains their possession. %The reason is that there is always the possibility that the opponents also be equipped with ammo and shoot at our agent, causing it to respawn and lose all the gathered ammopacks. For this reason, agents alternate between the scout / trooper roles whenever they run out of ammo / are equipped with ammo.
 
-The behaviour of a trooper is defined by Algorithm \ref{alg:trooper}. A trooper tries to capture the closest control point from his current location and, if they spot an enemy approaching another control point, goes back to re-capture it. If the team is in the possession of all control points, troopers go \emph{spawn camping}, meaning that they engage in an assault meant to cage the enemies in their spawn area area and prevent them from pursuing any objectives. 
+The behaviour of a trooper is defined by Algorithm \ref{alg:trooper}. A trooper tries to capture the closest control point from his current location and, if they spot an enemy approaching another control point, goes back to re-capture it. If the team is in the possession of all control points, troopers go \emph{spawn camping}, meaning that they engage in an assault meant to cage the enemies in their spawn area and prevent them from pursuing any objectives. 
 
 \begin{algorithm}
 \caption{Trooper behaviour pseudocode}
@@ -142,15 +142,15 @@ If an objective, ammo location that has ammo or an uncaptured control point, is 
 
 \subsection{Low level improvements}
 
-There is a number of small low-level improvements that improve the agents' efficiency. One of them is using path distance instead of Euclidean distance. When the distance to a position of the map is needed, we generate a path to that position and add the distances between the nodes in the path. That gives a more accurate metric when comparing distances. However, this is computationally costly so it not used when we expect that the additional accuracy will result in significantly better efficiency. 
+There is a number of small low-level improvements that were implemented. One of them is using path distance instead of Euclidean distance. When the distance to a position on the map is needed, we generate a path to that position and add the distances between the nodes in the path. That gives a more accurate metric when comparing distances. However, this is computationally costly so it not used when we do not expect that the additional accuracy will result in significantly better efficiency. 
 
 Another is preventing friendly fire or wasting ammo: Agents are not allowed to shoot whenever there is an obstacle, such as a wall or a teammate, standing between them and their target enemy. Additionally, the agent is prevented from shooting if it is detected that their target is in the enemy spawn area.
 
-Target selection is also a small but not insignificant detail. When an agent has a choice between multiple enemies to shoot at, they choose to shoot the one that would require them to make the smallest angle turn. 
+Target selection is also a small but not insignificant detail. When an agent has a choice between multiple enemies to shoot at, they choose to shoot the one that would require them to make the smallest turn in orientation. 
 
 Furthermore, turning and moving can get an agent farther from their target if the angle is not small enough. To counteract this, the speed is set to be proportional the absolute value of the turning angle that needs to be performed. 
 
-In the same vein, we consider an agent stuck if they have not moved for a pre-defined number of stages. An agent would detect whenever its location on the map had not changed for a few rounds in a row and change its orientation in order to escape. 
+In the same vein, we consider an agent stuck if they have not moved for a pre-defined number of time steps. An agent would detect whenever its location on the map had not changed for a few rounds in a row and change its orientation in order to escape. 
 
 Finally, another feature that was added was goal sharing. Since multiple agents could be assigned the same goal throughout the game, we limited the maximum number of agents that could go for the same goal, to a pre-defined constant. The rest of the agents were assigned the task of capturing the control points.
 
@@ -158,7 +158,7 @@ Finally, another feature that was added was goal sharing. Since multiple agents 
 
 \section{Experimental Setup}
 \label{sec:experimental_setup}
-In this section, we describe the experiments we perform in order to assess the performance of our agents. Each experiment consists of running 100 matches\footnote{Matches were run using the default game settings.} between our agents and an opponent. We have chosen three fixed opponents to use as a benchmark: one is the default agent while the others are taken from the agents submitted by other teams. We divide our experiments into two main categories: \emph{general progress} and \emph{parameter testing}. 
+In this section, we describe the experiments we performed in order to assess the performance of our agents. Each experiment consists of running 100 matches\footnote{Matches were run using the default game settings.} between our agents and an opponent. We have chosen three fixed opponents to use as a benchmark: one is the default agent while the others are taken from the agents submitted by other teams. We divide our experiments into two main categories: \emph{general progress} and \emph{parameter testing}. 
 
 %\subsection{General Progress}
 %\label{sub:agent_progress}
@@ -168,7 +168,7 @@ For the first category, we assessed the overall performance of our agent in vari
 %\label{sub:feature_progress}
 For the second category, we assessed the performance effect of the values of individual parameters of the agent. We performed experiments for two parameters: 
 
-The first parameter was the maximum number of scouts that are sent to collect ammo . We refer to this as the \emph{Scouts Experiment}. In our system this number is set to be proportional to the number of captured control points. For this experimented, we have tried setting it to be inversely proportional to the number of captured control points as well as constant and equal to half the team size.
+The first parameter was the maximum number of scouts that are sent to collect ammo . We refer to this as the \emph{Scouts Experiment}. In our system this number is set to be proportional to the number of captured control points. For this experiment, we have tried setting it to be inversely proportional to the number of captured control points as well as constant and equal to half the team size.
 
 %In our agent, the number of scouts is a function of the number of control points that are not possessed, given by the formula
 %\begin{equation*}
@@ -235,7 +235,7 @@ The interesting thing to note here is that during development each feature was t
 
 \subsection{Parameter testing}
 \subsubsection{Scouts Experiment}
-Based on the match results versus the two benchmark teams\footnote{Performance against the default agent gave no insight after a point since all matches resulted in victory.}, employing less scouts to collect ammo whenever more control points were being in the possession of the agent, did not make any substantial difference. With the number of scouts being half of the team, no improvement could be observed either. All this is presented in Figure \ref{fig:scouts}. Note that switching from proportional to control points owned to inversely proportional, the results are slightly worse against one team while slightly better against the other. Perhaps a completely different scheme could give real improvement; for example, first sending the agents to collect all the available ammo and then assigning scout roles to agents as they run out of ammo.
+Based on the match results versus the two benchmark teams\footnote{Performance against the default agent gave no insight after a point since all matches resulted in victory.}, employing fewer scouts to collect ammo whenever more control points were being in the possession of the agent, did not make any substantial difference. With the number of scouts being half of the team, no improvement could be observed either. All this is presented in Figure \ref{fig:scouts}. Note that switching from proportional to control points owned to inversely proportional, the results are slightly worse against one team while slightly better against the other. Perhaps a completely different scheme could give real improvement; for example, first sending the agents to collect all the available ammo and then assigning scout roles to agents as they run out of ammo.
 
 \begin{figure}[!h]
 \centering
@@ -260,13 +260,13 @@ The results can be seen in Figure \ref{fig:ammopacks}. Even big differences in t
 
 Extensive research has been done over the last decades in order to come up with algorithms that are able to determine optimal solutions for decision-making problems. Some of the first algorithms were developed for single-agent MDP problems for which the agent has full knowledge of the current state and transitions. These include value iteration, policy iteration, dynamic programming and variants of them \cite{boutilier}.
 
-In case of decision-making problems where the world is partially observable (POMDPs), it is much harder to determine an optimal solution. At every stage, the agent does not have full knowledge of the current state of the world. Problems with partial observability introduce a so-called \emph{belief space}, which represents a probability distribution over the state space that allows the agent to estimate the current state of the world. Therefore, finding optimal policies for POMDPs is a much more complex task than finding optimal policies for MDPs in the single-agent case. In the case of multi-agent problems, this complexity is even further increased. Some of the algorithms that determine an optimal policy through reinforcement learning include Q-Learning, Dyna, TD($\lambda$) and variants of them \cite{kaelbling}.
+In case of decision-making problems where the world is partially observable (POMDPs), it is much harder to determine an optimal solution. At every time step, the agent does not have full knowledge of the current state of the world. Problems with partial observability introduce a so-called \emph{belief space}, which represents a probability distribution over the state space that allows the agent to estimate the current state of the world. Therefore, finding optimal policies for POMDPs is a much more complex task than finding optimal policies for MDPs in the single-agent case. In the case of multi-agent problems, this complexity is even further increased. Some of the algorithms that determine an optimal policy through reinforcement learning include Q-Learning, Dyna, TD($\lambda$) and variants of them \cite{kaelbling}.
 
 %For this reason, algorithms that approximate the solutions of POMDPs are preferred, although they come at the cost of a less accurate solution. In case of multi-agents, the methods that are used to learn a policy can be divided into two categories: \emph{supervised learning} and \emph{reinforcement learning}. In the former one, the learning algorithm uses a set of \emph{training examples} in order to learn an optimal policy. In the latter one, the agent needs to explore the environment in order to determine the model of the world, which is previously unknown. 
 
 %In case of multi-agent systems with multiple learners, the environment is non-stationary, meaning that it is not sufficient to just train the agent before beginning the task (offline learning) and then apply the rules described by the optimal policy. Instead, the agent needs to adapt its policy at each stage during the game. This makes it more difficult to converge to a good strategy than it is in the case of single-agent systems. For this reason, we chose to implement a rule-based system in \emph{Domination}, since time is an important issue in the game and online adaption might exceed the maximum time alloted per agent at each stage. 
 
-Apart from programming the agents in a rule-based manner, we experimented with reinforcement learning. In reinforcement learning, the actions that an agent takes in a particular situation (state) are learned instead of coded by hand. The agents learns, by linking state-action pairs to (future) rewards, for every state the agent should pick the action with the highest expected future cumulative reward.
+Apart from programming the agents in a rule-based manner, we experimented with reinforcement learning. In reinforcement learning, the actions that an agent takes in a particular situation (state) are learned instead of coded by hand. The agents learn, by linking state-action pairs to (future) rewards, for every state the agent should pick the action with the highest expected future cumulative reward.
 
 %  During learning, agents should not always pick the action with the highest reward (greedy policy), instead with some probability they should explore. This way agents will converge to a globally optimal policy.
 
@@ -282,7 +282,7 @@ Unfortunately, this is an extremely hard problem. Modeling all this information 
 
 %In the papers by van Hasselt \cite{continuous} and Oliehoek \cite{decpomdp} both continuous state-action spaces and Dec-POMDPs are discussed. Both of them result in a computational complexity that is proven to be intractable, when computing a globally optimal policy.
 
-As both conditions can't be fully met, some concessions have to made. By making these concessions, we lose guarantees of arriving at a global optimum. The question that arises is if the local optimum that can be found results in a performance that can compete with rule-based agents. Later on we will discuss this question further.
+As both conditions can't be fully met, some concessions need to be made. By making these concessions, we lose guarantees of arriving at a global optimum. The question that arises is if the local optimum that can be found results in a performance that can compete with rule-based agents. Later on we will discuss this question further.
 
 By placing additional constraints on the model, we can make it smaller sacrificing objectivity in the process. For instance, a model containing enough information to learn solutions to the following sub-problems would be desirable:
 \begin{itemize}
@@ -313,7 +313,7 @@ This is already an enormous concession because the agent does not capture other 
 
 \subsection{Action space}
 \label{subsec:action_space}
-Continuing with the suggestion above, the action space may consisted of the following super-actions:
+Continuing with the suggestion above, the action space may consist of the following super-actions:
 \begin{itemize}
 \item Move towards best control point.
 \item Move towards best ammo location.
@@ -323,13 +323,13 @@ Continuing with the suggestion above, the action space may consisted of the foll
 
 \subsection{Reward signal}
 \label{subsec:reward_signal}
-Finally, to complete the mode, we require a reward signal, something harder than may seem at first glance. One option would be to only give out reward at the end of the game\footnote{For example, 1 for winning, 0 for draw, -1 for losing.}. The other option is to give out reward at every stage.
+Finally, to complete the model, we require a reward signal, something harder than may seem at first glance. One option would be to only give out reward at the end of the game\footnote{For example, 1 for winning, 0 for draw, -1 for losing.}. The other option is to give out reward at every time step.
 
-A very interesting advantage of reinforcement learning techniques, is that you can implement them without any bias. We, humans, are always biased when we learn, we have some initial thoughts about how to win this game (therefore we 'converge' very efficiently to a local optimum). But it is hard for humans to find a global optimum when this requires some out of the box thinking. By giving rewards at every stage we interfere with the ``tabula rasa'' way reinforcement learning is capable of. For example, if we give a small reward for shooting an enemy, we give the agent a bias for shooting and picking up ammo. This could sound like a good strategy but it actually is nothing more than a biased thought.
+A very interesting advantage of reinforcement learning techniques is that you can implement them without any bias. We, humans, are always biased when we learn, we have some initial thoughts about how to win this game (therefore we 'converge' very efficiently to a local optimum). But it is hard for humans to find a global optimum when this requires some out of the box thinking. By giving rewards at every time step we interfere with the ``tabula rasa'' way reinforcement learning is capable of. For example, if we give a small reward for shooting an enemy, we give the agent a bias for shooting and picking up ammo. This could sound like a good strategy but it actually is nothing more than a biased thought.
 
 \subsection{Arms race}
 \label{subsec:opponent}
-In order for agents to learn, their enemy should not play too easy or too hard. Ideally, the enemy gets more difficult to beat during the learning process. In self-play the agent plays against itself. An interesting question to pose in that case is whether it is possible for both teams to share their Q-Value approximation and for both of them to push updates to it. Another idea is to have a set of progressively harder opponents, starting with the default and cumulating to a very advanced rule-based agent.
+In order for agents to learn, their enemy should not play too easy or too hard. Ideally, the enemy gets more difficult to beat during the learning process. In self-play the agent plays against itself. An interesting question to pose in that case is whether it is possible for both teams to share their Q-Value approximation and for both of them to push updates to it. Another idea is to have a set of progressively harder opponents, starting with the default agent and cumulating to a very advanced rule-based agent.
 
 %To summarize our reinforcement learning model, we did basically three things:
 %-let every agent learn/plan on it's own (decentralized)
@@ -342,8 +342,8 @@ Some of the limitations of the model presented include:
 \begin{itemize}
 \item The shooting policy cannot be updated.
 \item Opponents are not explicitly modeled or even kept track of.
-\item Coordination is limited (only indirectly by means of how the best control point and ammo locations is chosen)
-\item Reward signals at every stage can introduce unnecessary bias.
+\item Coordination is limited\footnote{Only indirectly by means of how the best control point and ammo locations is chosen.}.
+\item Reward signals at every time step can introduce unnecessary bias.
 \item History, a critical component of POMDPs, is not modeled at all.
 \item Even the default agent could be too strong an opponent to start with.
 \end{itemize}
@@ -351,11 +351,11 @@ Some of the limitations of the model presented include:
 \subsection{Experimentation}
 \label{subsec:qlearning}
 We implemented Q-learning on the model and experimented with different exploration and learning rates. We created one Q-value table for a team of agents, the six agents all updated the same table, this way we expected convergence to happen six times faster.
-Due to the rule-based shooting and control point / ammo location selection, the agents were at least forced to always pick a target that made some sense. Unfortunately, the agents ended up switching actions every stage and therefore almost never reached a goal. One idea to alleviate this would be commitment sequences \cite{gameth}. A commitment sequence is a list of time slots for which an agent is committed to selecting always the same action. That would have the effect of minimising this undesirable behaviour and make learning possible.
+Due to the rule-based shooting and control point / ammo location selection, the agents were at least forced to always pick a target that made some sense. Unfortunately, the agents ended up switching actions every time step and therefore almost never reached a goal. One idea to alleviate this would be commitment sequences \cite{gameth}. A commitment sequence is a list of time slots for which an agent is committed to selecting always the same action. That would have the effect of minimising this undesirable behaviour and make learning possible.
 
-After hours of computation time for learning we did not notice significant improvement. We analysed potential problems. A first intuition is that number of state-action pairs (82.944) is too large. We computed the average running time of a game, that is based on computation time per agent, this turned out to be approximately 15 seconds. The absolute lower bound of games required to try all state-action pairs with games of 600 stages is 139. This lower bound will in fact never be reached as this requires every subsequent state-action pair to be unique for a sequence of 139 games. For future rewards to propagate to earlier state-action pairs many more games are required. Multiplying this large number of games with computation time clarified the fact that we didn't observe convergence. Although there are other factors that could be of influence as well; opponent is too hard, reward signal is not representative, state space is too elementary to allow intelligent reasoning etc.
+After hours of computation time for learning we did not notice significant improvement. We analysed potential problems. A first intuition is that number of state-action pairs (82.944) is too large. We computed the average running time of a game, that is based on computation time per agent, this turned out to be approximately 15 seconds. The absolute lower bound of games required to try all state-action pairs with games of 600 time steps is 139. This lower bound will in fact never be reached as this requires every subsequent state-action pair to be unique for a sequence of 139 games. For future rewards to propagate to earlier state-action pairs many more games are required. Multiplying this large number of games with computation time clarified the fact that we didn't observe convergence. Although there are other factors that could be of influence as well; opponent is too hard, reward signal is not representative, state space is too elementary to allow intelligent reasoning etc.
 
-We reconsidered the trade-off of defining a compact state space on the one hand and a very descriptive state space, to allow for more intelligent reasoning, on the other hand. As described in the section limitations the state description had already many limitations, making it even smaller would make it even less likely to allow for intelligent reasoning.
+We reconsidered the trade-off of defining a compact state space on the one hand and a very descriptive state space, to allow for more intelligent reasoning, on the other hand. As described in the Section \ref{subsec:limitations} the state description had already many limitations, making it even smaller would make it even less likely to allow for intelligent reasoning.
 
 \section{Conclusion}
 \label{sec:conclusion}
